@@ -3,6 +3,7 @@
 import socket
 import cmd
 import os
+import subprocess
 
 #look for subprocess module not os
 
@@ -90,8 +91,17 @@ def reading_conf_f():
 
 
 if __name__ == "__main__":
+    """
     prompt = Daemon()
     config = reading_conf_f()
-    #prompt.logfile = config['logfile']
+    prompt.logfile = config['logfile']
     prompt.prompt = 'wtf?> '
     prompt.cmdloop()
+    """
+    while True:
+        try:
+            command = input('wtf?> ')
+            subprocess.run(command, stdout)
+            #print(command)
+        except EOFError:
+            exit()
