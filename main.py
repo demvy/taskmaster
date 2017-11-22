@@ -1,9 +1,11 @@
-#!/usr/bin/env
+#!/usr/bin/env python
 
 import socket
 import cmd
 import os
 import subprocess
+import shlex
+import tempfile
 
 #look for subprocess module not os
 
@@ -101,7 +103,10 @@ if __name__ == "__main__":
     while True:
         try:
             command = input('wtf?> ')
-            subprocess.run(command, stdout)
+            with tempfile.TemporaryFile() as tempf:
+                proc = subprocess.Popen(shlex.split(command), stdout=tempf)
+                tempf.seek(0)
+                print(tempf.read().decode('utf-8'))
             #print(command)
         except EOFError:
             exit()
