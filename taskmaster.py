@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 
 import sys
+import subprocess
+import tempfile
+from time import sleep
 from ConfigClass import Config
 
 options = {'--timeout': ' n \vafter n seconds, terminate the executable',
@@ -46,4 +49,9 @@ if __name__ == "__main__":
     cmd_index = sys.argv.index('--') + 1
     if good_cmd_args(sys.argv[1:cmd_index]):
         add_args_to_conf(sys.argv[1:cmd_index], conf)
+        command = ' '.join(sys.argv[cmd_index:])
+        with tempfile.TemporaryFile() as tempf:
+            proc = subprocess.run(["42sh", command], stdout=tempf)
+            tempf.seek(0)
+            print(tempf.read())
     print(conf.get_options())
