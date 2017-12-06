@@ -1,0 +1,15 @@
+
+all: $(NAME)
+
+$(NAME):
+echo "good"
+	make -C ./42sh
+	echo "done"
+
+clean:
+	make clean -C ./42sh
+
+fclean: clean
+	make fclean -C ./42sh
+
+re: fclean all
