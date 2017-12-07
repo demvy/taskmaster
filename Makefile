@@ -3,9 +3,8 @@ NAME = taskmaster
 
 all: $(NAME)
 
-$(NAME): 
+$(NAME):
 	@ make -C ./42sh
-	export PATH=$(PATH):./42sh
 
 clean: 
 	@ make clean -C ./42sh
