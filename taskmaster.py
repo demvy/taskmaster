@@ -6,10 +6,10 @@ import tempfile
 from time import sleep
 from ConfigClass import Config
 
-options = {'--timeout': ' n \vafter n seconds, terminate the executable',
-           '--delayrandom': ' \vdelay the execution of executable by '
+options = {'--timeout': 'n\nafter n seconds, terminate the executable',
+           '--delayrandom': 'n\ndelay the execution of executable by '
                             'random seconds up to n',
-           '--debug': ' \venable debugging output, all logs to stderr and'
+           '--debug': ' enable debugging output, all logs to stderr and'
                       ' not syslog.',
            '--help': 'this text',
            '--': 'use the -- to separate supervisor options from arguments'
@@ -84,14 +84,45 @@ def check_args(args):
     return False
 
 
+def run_command(command):
+    """
+    Runs command, print stdout to stdout of parent shell, uses 42sh)
+    :param command: command to run (string) can be a format of 42sh
+    :return:
+    """
+    with tempfile.TemporaryFile() as tempf:
+        proc = subprocess.run(["42sh", command], stdout=tempf)
+        tempf.seek(0)
+        print(tempf.read().decode('utf-8'))
+
+
+def run_help(config):
+    """
+    Shows help for module usage
+    :param config: Config object of program
+    :return:
+    """
+    print('You are reading a help for taskmaster!\nUsage: python3 '
+          'taskmaster.py [options] -- command.', end='\n', file=sys.stdout)
+    print('OPTIONS:', end='\n', file=sys.stdout)
+    if len(config.options) > 1:
+        for key in config.options:
+            print('{0:>15}\t{1:<60}'.format(key, config.options[key]),
+                  sep='\n', file=sys.stdout)
+    else:
+        for key in options:
+            print('{0:>15}\t{1:<60}'.format(key, options[key]),
+                  sep='\n', file=sys.stdout)
+
+
 if __name__ == "__main__":
     conf = Config()
     if check_args(sys.argv[1:]):
         cmd_index = sys.argv.index('--') + 1
         add_args_to_conf(sys.argv[1:cmd_index], conf)
-        command = ' '.join(sys.argv[cmd_index:])
-        with tempfile.TemporaryFile() as tempf:
-            proc = subprocess.run(["./42sh/42sh", command], stdout=tempf)
-            tempf.seek(0)
-            print(tempf.read())
-    print(conf.get_options())
+        print(conf.get_options())
+        if '--help' in conf.options.keys():
+            run_help(conf)
+            exit(0)
+        command = str(sys.argv[cmd_index:][0])
+        run_command(command)
