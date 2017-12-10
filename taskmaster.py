@@ -1,12 +1,11 @@
 #!/usr/bin/env python
 
 import sys, os, signal
-#import subprocess
 import tempfile
 from random import randint
 from time import sleep
 from ConfigClass import Config
-from subprocess import TimeoutExpired, run, Popen
+from subprocess import TimeoutExpired, Popen
 
 options = {'--timeout': 'n\v\bafter n seconds, terminate the executable',
            '--delayrandom': 'n\v\bdelay the execution of executable by '
@@ -53,9 +52,6 @@ def check_delim(args):
         cmd_index = sys.argv.index('--') + 1
         return True
     except ValueError:
-        # print('ERROR:taskmaster usage: python3 taskmaster.py [options]'
-        #       ' -- command. For more detailed manual use flag --help',
-        #       end='\n', file=sys.stderr)
         return False
 
 
@@ -90,9 +86,7 @@ def delay_run_command(n):
     Delay program from 1 to n seconds chosen randomly
     :return:
     """
-    b = randint(1, n)
-    print('choosen delay = {}'.format(b))
-    sleep(b)
+    sleep(randint(1, n))
 
 
 def run_command(conf):
@@ -106,11 +100,15 @@ def run_command(conf):
     with tempfile.TemporaryFile() as tempf:
         proc = Popen(["42sh", conf.options['--']], preexec_fn=os.setsid)
         try:
-            tempf, errs = proc.communicate(timeout=conf.options['--timeout'])
+            if '--timeout' in conf.options:
+                timeout = conf.options['--timeout']
+                code = proc.wait(timeout=timeout)
+            else:
+                code = proc.wait(0)
         except TimeoutExpired:
             os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-            tempf.seek(0)
-            print(tempf.read().decode('utf-8'))
+            #tempf.seek(0)
+            #print(tempf.read().decode('utf-8'))
 
 
 def run_help(config):
@@ -139,7 +137,8 @@ def validate_conf_vars(conf):
         if '--timeout' in conf.options:
             conf.add_option('--timeout', int(conf.options['--timeout']))
         if '--delayrandom' in conf.options:
-            conf.add_option('--delayrandom', int(conf.options['--delayrandom']))
+            conf.add_option('--delayrandom',
+                            int(conf.options['--delayrandom']))
         return True
     except ValueError:
         print('Variables n have to be an integers!Read --help',
@@ -152,10 +151,9 @@ if __name__ == "__main__":
     if check_args(sys.argv[1:], conf):
         cmd_index = sys.argv.index('--') + 1
         add_args_to_conf(sys.argv[1:cmd_index + 1], conf)
+        if '--help' in conf.options.keys():
+            run_help(conf)
+            exit(0)
         if validate_conf_vars(conf):
-            print(conf.get_options())
-            if '--help' in conf.options.keys():
-                run_help(conf)
-                exit(0)
             command = conf.options['--']
             run_command(conf)
