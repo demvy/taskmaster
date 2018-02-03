@@ -16,7 +16,7 @@ def run_command(args):
     Args:
         args (ArgumentParser obj): arguments of command line
     """
-    time.sleep(args.delayrandom)
+    time.sleep(args.delay)
     with tempfile.TemporaryFile() as tempf:
         proc = Popen(["42sh", args.command], preexec_fn=os.setsid)
         try:
@@ -35,7 +35,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Taskmaster non-interactive mode")
     parser.add_argument('-t', '--timeout', action='store', type=int, required=False,
                         help='Terminate the executable after n seconds')
-    parser.add_argument('-d', '--delayrandom', action='store', required=False,
+    parser.add_argument('-d', '--delay', action='store', required=False,
                         help='Delay the execution of executable by n seconds')
     parser.add_argument('-c', '--command', action="store", required=True,
                         help="Command to execute")
