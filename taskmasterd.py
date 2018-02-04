@@ -1,6 +1,7 @@
 
 import yaml
-
+import logging
+from datetime import datetime as dt
 
 def parse_config():
     """
@@ -16,12 +17,21 @@ def parse_config():
         except yaml.YAMLError as exc:
             raise exc
 
+try:
+    cfg = parse_config()
+    if cfg['taskmasterd']['nodaemon']:
+        logging.basicConfig(level=logging.DEBUG)
+    else:
+        try:
+            filename = cfg['taskmasterd']['logfile']
+            logging.basicConfig(filename=filename, level=logging.DEBUG)
+        except KeyError as e:
+            logging.basicConfig(filename=dt.strftime(dt.now(), '%Y.%m.%d-%H:%M:%S'), level=logging.DEBUG)
+except Exception as e:
+    print(e)
+    logging.error(e)
+
 
 if __name__ == "__main__":
-    try:
-        cfg = parse_config()
-        for section in cfg:
-            print section
-        print cfg
-    except Exception as e:
-        print e
+    print(cfg)
+    logging.debug("In main test logging")
