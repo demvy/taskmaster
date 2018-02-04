@@ -1,57 +1,50 @@
 #!/usr/bin/env python
 
-import sys
-import subprocess
+import os
+import signal
 import tempfile
-from time import sleep
-from ConfigClass import Config
-
-options = {'--timeout': ' n \vafter n seconds, terminate the executable',
-           '--delayrandom': ' \vdelay the execution of executable by '
-                            'random seconds up to n',
-           '--debug': ' \venable debugging output, all logs to stderr and'
-                      ' not syslog.',
-           '--help': 'this text',
-           '--': 'use the -- to separate supervisor options from arguments'
-                 ' to the executable which will appear as options.'}
+import argparse
+import time
+from subprocess import TimeoutExpired, Popen
 
 
-def good_cmd_args(args):
+def run_command(args):
     """
-    Checks options, prints errors in stderr
-    :param args: list of arguments from shell, up to --
-    :return: True if all options are right, False otherwise
+    Runs command, print stdout to stdout of parent shell, uses 42sh)
+
+    Args:
+        args (ArgumentParser obj): arguments of command line
     """
-    for ar in args:
-        if ar[:1] == '--' or ar.startswith('-') and ar not in options.keys():
-            print('ERROR:taskmaster:option {} not recognized'.format(ar),
-                  end='\n', file=sys.stderr)
-            return False
-    return True
+    time.sleep(args.delay)
+    with tempfile.TemporaryFile() as tempf:
+        proc = Popen(["42sh", args.command], preexec_fn=os.setsid)
+        try:
+            if args.timeout:
+                code = proc.wait(timeout=args.timeout)
+        except TimeoutExpired:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            tempf.seek(0)
+            print(tempf.read().decode('utf-8'))
 
 
-def add_args_to_conf(args, conf):
+def parse_args():
     """
-    Makes Config object filled with args
-    :param args: list of arguments from shell, up to --
-    :param conf: Config object
-    :return:
+    Parsing cmdline arguments
     """
-    for (key, val) in zip(args[::2], args[1::2]):
-        if val != '--':
-            conf.add_option(key, val)
-        else:
-            conf.add_option(key, True)
+    parser = argparse.ArgumentParser(description="Taskmaster non-interactive mode")
+    parser.add_argument('-t', '--timeout', action='store', type=int, required=False,
+                        help='Terminate the executable after n seconds')
+    parser.add_argument('-d', '--delay', action='store', required=False,
+                        help='Delay the execution of executable by n seconds')
+    parser.add_argument('-c', '--command', action="store", required=True,
+                        help="Command to execute")
+    parser.set_defaults(func=run_command)
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
-    conf = Config()
-    cmd_index = sys.argv.index('--') + 1
-    if good_cmd_args(sys.argv[1:cmd_index]):
-        add_args_to_conf(sys.argv[1:cmd_index], conf)
-        command = ' '.join(sys.argv[cmd_index:])
-        with tempfile.TemporaryFile() as tempf:
-            proc = subprocess.run(["42sh", command], stdout=tempf)
-            tempf.seek(0)
-            print(tempf.read())
-    print(conf.get_options())
+    args = parse_args()
+    try:
+        args.func(args)
+    except Exception as e:
+        print(e)
