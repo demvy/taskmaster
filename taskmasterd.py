@@ -26,7 +26,7 @@ try:
             filename = cfg['taskmasterd']['logfile']
             logging.basicConfig(filename=filename, level=logging.DEBUG)
         except KeyError as e:
-            logging.basicConfig(filename=dt.strftime(dt.now(), '%Y.%m.%d-%H:%M:%S_taskmasterd.log'), level=logging.DEBUG)
+            logging.basicConfig(filename=dt.strftime(dt.now(), '%Y.%m.%d-%H:%M:%S'), level=logging.DEBUG)
 except Exception as e:
     print(e)
     logging.error(e)
