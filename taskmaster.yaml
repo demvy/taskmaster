@@ -11,8 +11,6 @@
 taskmasterd:
     logfile: "./taskmasterd.log"
     nodaemon: false  # start in foreground if true; default false
-    minfds: 1024    # min. avail startup file descriptors; default 1024
-    minprocs: 200
 
 ls:
     cmd: "/bin/ls -l /"
@@ -54,3 +52,6 @@ mycom1:
         B: ura
         FOO: bar
         A: 1
+
+mycom1111:
+    cmd: "govno i jopi"

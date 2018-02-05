@@ -1,7 +1,10 @@
 
 import yaml
 import logging
+import signal
+import time
 from datetime import datetime as dt
+
 
 def parse_config():
     """
@@ -16,6 +19,15 @@ def parse_config():
             return cfg
         except yaml.YAMLError as exc:
             raise exc
+
+new_cfg = {}
+
+def signal_handler(signum, frame):
+    global new_cfg
+    new_cfg = parse_config()
+    print("new_cfg created")
+    # implement
+    #  !!!!! reload_config()
 
 try:
     cfg = parse_config()
@@ -34,4 +46,8 @@ except Exception as e:
 
 if __name__ == "__main__":
     print(cfg)
+    signal.signal(signal.SIGHUP, signal_handler)
+    while True:
+        time.sleep(3)
+        print(cfg)
     #logging.debug("In main test logging")
