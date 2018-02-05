@@ -34,4 +34,4 @@ except Exception as e:
 
 if __name__ == "__main__":
     print(cfg)
-    logging.debug("In main test logging")
+    #logging.debug("In main test logging")
