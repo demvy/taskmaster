@@ -1,3 +1,4 @@
+# - comments
 # Sample supervisor config file.
 #
 # Notes:
@@ -9,11 +10,7 @@
 
 taskmasterd:
     logfile: "./taskmasterd.log"
-    loglevel: info  # log level; default info; others: debug,warn,trace
-    nodaemon: true  # start in foreground if true; default false
-    minfds: 1024    # min. avail startup file descriptors; default 1024
-    minprocs: 200
-    histfile: "/tmp/taskmaster.hist"
+    nodaemon: false  # start in foreground if true; default false
 
 ls:
     cmd: "/bin/ls -l /"
@@ -55,3 +52,6 @@ mycom1:
         B: ura
         FOO: bar
         A: 1
+
+mycom1111:
+    cmd: "govno i jopi"

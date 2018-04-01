@@ -5,7 +5,7 @@ import signal
 import tempfile
 import argparse
 import time
-from subprocess import TimeoutExpired, Popen
+import subprocess
 
 
 def run_command(args):
@@ -15,13 +15,13 @@ def run_command(args):
     Args:
         args (ArgumentParser obj): arguments of command line
     """
-    time.sleep(args.delay)
+    time.sleep(float(args.delay))
     with tempfile.TemporaryFile() as tempf:
-        proc = Popen(["42sh", args.command], preexec_fn=os.setsid)
+        proc = subprocess.Popen(["42sh", args.command], preexec_fn=os.setsid)
         try:
             if args.timeout:
-                code = proc.wait(timeout=args.timeout)
-        except TimeoutExpired:
+                code = proc.wait(timeout=float(args.timeout))
+        except subprocess.TimeoutExpired:
             os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
             tempf.seek(0)
             print(tempf.read().decode('utf-8'))
