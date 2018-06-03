@@ -3,32 +3,61 @@ import yaml
 import logging
 import signal
 import time
+import os
 from datetime import datetime as dt
 
 cmd_options_lst = ['cmd', 'umask', 'workingdir', 'priority', 'autostart', 'startsecs', 'autorestart',
                    'exitcodes', 'startretries', 'starttime', 'stopsignal', 'stopwaitsecs', 'user', 'stdout',
                    'stderr', 'env']
-cmd_necessary_opt_lst = ['cmd', 'workingdir', 'autostart', 'exitcodes', 'startretries', 'stopsignal', 'user']
+cmd_necessary_opt_lst = ['cmd', 'workingdir', 'startsecs', 'exitcodes', 'starttime', 'startretries',
+                         'stopsignal', 'user']
 
-class Process(kwarg=None):
-    def __init__(self):
-        self.check_kwarg(kwarg)
 
-        # write fullfill_kwarg function
-        new_kwarg = self.fullfill_kwarg(kwarg)
-        self.cmd = new_kwarg['cmd']
-        self.umask = new_kwarg['umask']
-        self.workingdir = new_kwarg['workingdir']
-        self.autostart = new_kwarg['autostart']
-        self.autorestart = new_kwarg['autorestart']
-        self.exitcodes = new_kwarg['exitcodes'].split(',')
-        self.startretries = new_kwarg['startretries']
-        self.starttime = new_kwarg['starttime']
-        self.stopsignal = new_kwarg['stopsignal']
-        self.stopwaitsecs = new_kwarg['stopwaitsecs']
-        self.stdout = new_kwarg['stdout']
-        self.stderr = new_kwarg['stderr']
-        self.env = new_kwarg['env']
+def fill_param(x, v, d):
+    if isinstance(d, dict) and x not in d.keys():
+        d[x] = v
+        return d
+    else:
+        raise ValueError
+
+
+class Process():
+    def __init__(self, kwarg):
+        try:
+            self.check_kwarg(kwarg)
+            new_kwarg = self.fullfill_kwarg(kwarg)
+            self.cmd = new_kwarg['cmd']
+            self.umask = new_kwarg['umask']
+            self.workingdir = new_kwarg['workingdir']
+            self.priority = new_kwarg['priority']
+            self.autostart = new_kwarg['autostart']
+            self.autorestart = new_kwarg['autorestart']
+            self.exitcodes = [int(i) for i in new_kwarg['exitcodes'].split(',')]
+            self.startretries = new_kwarg['startretries']
+            self.startsecs = new_kwarg['starttime']
+            self.stopsignal = new_kwarg['stopsignal']
+            self.stopwaitsecs = new_kwarg['stopwaitsecs']
+            self.stdout = new_kwarg['stdout']
+            self.stderr = new_kwarg['stderr']
+            self.env = new_kwarg['env']
+        except ValueError:
+            print("Can't create process with such config!")
+            exit(0)
+
+    def fullfill_kwarg(self, kwarg):
+        new_kwarg = kwarg.copy()
+        try:
+            new_kwarg = fill_param('priority', 999, new_kwarg)
+            new_kwarg = fill_param('autostart', True, new_kwarg)
+            new_kwarg = fill_param('stopwaitsecs', 10, new_kwarg)
+            new_kwarg = fill_param('umask', '022', new_kwarg)
+            new_kwarg = fill_param('stdout', 1, new_kwarg)
+            new_kwarg = fill_param('stderr', 2, new_kwarg)
+            new_kwarg = fill_param('env', os.environ, new_kwarg)
+            return new_kwarg
+        except ValueError as e:
+            print("Can't initialize process with default values. Exiting")
+            exit(0)
 
     def check_kwarg(self, kwarg):
         for opt in kwarg.keys():
@@ -37,13 +66,28 @@ class Process(kwarg=None):
         if not set(cmd_necessary_opt_lst).issubset(set(kwarg.keys())):
             raise ValueError
         for k, v in kwarg.items():
-            #if k == 'cmd':
-            # write function to check all params by types and possible values
-            print(k)
+            if k == 'cmd' or k == 'umask' or k == 'workingdir' or k == 'exitcodes' or k == 'stopsignal' or k == 'user':
+                if not isinstance(k, str):
+                    raise ValueError
+            if k == 'umask' and not k.isnumeric():
+                raise ValueError
+            if k == 'numprocs' or k == 'priority' or k == 'startsecs' or k == 'startretries' or k == 'stopwaitsecs':
+                if not isinstance(k, int):
+                    raise ValueError
+            if k == 'numprocs' or k == 'startsecs' or k == 'startretries' or k == 'stopwaitsecs' and k < 0 or k > 1000:
+                raise ValueError
+            if k == 'exitcodes':
+                lst = [int(i) for i in v.split(',')]
+                if False in list(map(lambda x: False if x not in range(256) else True, lst)):
+                    raise ValueError
+            if k == 'stopsignal':
+                dict_of_signals = dict((k, v) for v, k in reversed(sorted(signal.__dict__.items())) if v.startswith('SIG') and not v.startswith('SIG_'))
+                if v not in dict_of_signals.values():
+                    raise ValueError
 
 
-class TaskmasterDaemon(config=None):
-    def __init__(self):
+class TaskmasterDaemon():
+    def __init__(self, config):
         self.config = None
         #process = {'process_name' : 'state'}
         self.processes = []
@@ -93,11 +137,11 @@ def signal_handler(signum, frame):
 
 try:
     new_cfg = parse_config()
-    if cfg['taskmasterd']['nodaemon']:
+    if new_cfg['taskmasterd']['nodaemon']:
         logging.basicConfig(level=logging.DEBUG)
     else:
         try:
-            filename = cfg['taskmasterd']['logfile']
+            filename = new_cfg['taskmasterd']['logfile']
             logging.basicConfig(filename=filename, level=logging.DEBUG)
         except KeyError as e:
             logging.basicConfig(filename=dt.strftime(dt.now(), '%Y.%m.%d-%H:%M:%S'), level=logging.DEBUG)
