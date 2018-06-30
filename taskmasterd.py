@@ -41,8 +41,7 @@ class Process():
             self.stderr = new_kwarg['stderr']
             self.env = new_kwarg['env']
         except ValueError:
-            print("Can't create process with such config!")
-            exit(0)
+            raise ValueError("Can't create process with such config!")
 
     def fullfill_kwarg(self, kwarg):
         new_kwarg = kwarg.copy()
@@ -56,35 +55,36 @@ class Process():
             new_kwarg = fill_param('env', os.environ, new_kwarg)
             return new_kwarg
         except ValueError as e:
-            print("Can't initialize process with default values. Exiting")
-            exit(0)
+            raise ValueError("Can't initialize process with default values. Exiting")
 
     def check_kwarg(self, kwarg):
         for opt in kwarg.keys():
             if opt not in cmd_options_lst:
-                raise ValueError
+                raise ValueError('option "%s" is not found in config' % opt)
         if not set(cmd_necessary_opt_lst).issubset(set(kwarg.keys())):
-            raise ValueError
+            raise ValueError('not filled all necessary parameters!')
         for k, v in kwarg.items():
             if k == 'cmd' or k == 'umask' or k == 'workingdir' or k == 'exitcodes' or k == 'stopsignal' or k == 'user':
                 if not isinstance(k, str):
-                    raise ValueError
+                    raise ValueError('bad presentation of "%s"' % k)
             if k == 'umask' and not k.isnumeric():
-                raise ValueError
+                raise ValueError('bad value for "%s"' % k)
             if k == 'numprocs' or k == 'priority' or k == 'startsecs' or k == 'startretries' or k == 'stopwaitsecs':
                 if not isinstance(k, int):
-                    raise ValueError
+                    raise ValueError('bad presentation of "%s"' % k)
             if k == 'numprocs' or k == 'startsecs' or k == 'startretries' or k == 'stopwaitsecs' and k < 0 or k > 1000:
-                raise ValueError
+                raise ValueError('bad value for "%s"' % k)
             if k == 'exitcodes':
                 lst = [int(i) for i in v.split(',')]
                 if False in list(map(lambda x: False if x not in range(256) else True, lst)):
-                    raise ValueError
+                    raise ValueError('bad value for "%s"' % k)
             if k == 'stopsignal':
-                dict_of_signals = dict((k, v) for v, k in reversed(sorted(signal.__dict__.items())) if v.startswith('SIG') and not v.startswith('SIG_'))
+                dict_of_signals = dict((kr, v) for v, kr in reversed(sorted(signal.__dict__.items())) if v.startswith('SIG') and not v.startswith('SIG_'))
                 if v not in dict_of_signals.values():
-                    raise ValueError
+                    raise ValueError('bad value %s for "%s"' % (v, k))
 
+    def run(self):
+        pass
 
 class TaskmasterDaemon():
     def __init__(self, config):
