@@ -2,13 +2,11 @@ import yaml
 import signal
 import os
 
-
-def fill_param(x, v, d):
-    if isinstance(d, dict) and x not in d.keys():
-        d[x] = v
-        return d
-    else:
-        raise ValueError
+cmd_options_lst = ['cmd', 'umask', 'workingdir', 'priority', 'autostart', 'startsecs', 'autorestart',
+                   'exitcodes', 'startretries', 'starttime', 'stopsignal', 'stopwaitsecs', 'user', 'stdout',
+                   'stderr', 'env']
+cmd_necessary_opt_lst = ['cmd', 'workingdir', 'startsecs', 'exitcodes', 'starttime', 'startretries',
+                         'stopsignal', 'user']
 
 
 class Config(object):
@@ -16,18 +14,36 @@ class Config(object):
     A Config class, shows options for server, client
     or non-interactive taskmaster
     """
-    cmd_options_lst = ['cmd', 'umask', 'workingdir', 'priority', 'autostart', 'startsecs', 'autorestart',
-                       'exitcodes', 'startretries', 'starttime', 'stopsignal', 'stopwaitsecs', 'user', 'stdout',
-                       'stderr', 'env']
-    cmd_necessary_opt_lst = ['cmd', 'workingdir', 'startsecs', 'exitcodes', 'starttime', 'startretries',
-                             'stopsignal', 'user']
 
     def __init__(self, conf_name):
         """Return Config object with given dict of options or {}"""
         options = self.read_from_config_file(conf_name)
-        self.check_kwarg(options)
+        for d in options.pop('taskmasterd', None).keys():
+            self.check_kwarg(options.get(d))
+        self.check_daemon_conf(options.get('taskmasterd', {}))
+        taskmasterd_opt = options.get('taskmasterd', {})
+        self.logfile = taskmasterd_opt.get('logfile', 'taskmasterd.log')
+        self.daemon = taskmasterd_opt.get('daemon', False)
+        self.jobs_amount = len(options.pop('taskmasterd'))
+        self.lst_proc_conf = []
+        self.create_proc_confs(options.pop('taskmasterd'))
+
+    def create_proc_confs(self, options):
         # For each process config fill params and add Process conf to list of confs
-        #self.options = self.fullfill_kwarg(options)
+        for k, v in options.items():
+            conf = dict()
+            for name, value in v.items():
+                setattr(conf, name, value)
+            setattr(conf, 'priority', conf.get('priority', 999))
+            setattr(conf, 'autostart', conf.get('autostart', True))
+            setattr(conf, 'stopwaitsecs', conf.get('stopwaitsecs', 10))
+            setattr(conf, 'umask', conf.get('umask', '022'))
+            setattr(conf, 'stdout', conf.get('stdout', 1))
+            setattr(conf, 'stderr', conf.get('stderr', 2))
+            setattr(conf, 'env', conf.get('env', os.environ))
+            setattr(conf, 'logfile', self.logfile)
+            proc_conf = ProcessConfig(conf, k)
+            self.lst_proc_conf.append(proc_conf)
 
     def set_options(self, opt):
         """Set dict of options"""
@@ -50,11 +66,20 @@ class Config(object):
             except yaml.YAMLError as exc:
                 raise exc
 
+    def check_daemon_conf(self, kwarg):
+        if len(kwarg) > 2:
+            raise ValueError('too big config for taskmasterd. 2 params allowed only')
+        conf_len = len(kwarg)
+        if conf_len == 1 and 'logfile' not in kwarg.keys() or 'daemon' not in kwarg.keys():
+            raise ValueError('not known parameter "%s"' % kwarg.keys()[0])
+        elif conf_len == 2 and 'logfile' not in kwarg.keys() and 'daemon' not in kwarg.keys():
+            raise ValueError('bad options in taskmasterd config')
+
     def check_kwarg(self, kwarg):
         for opt in kwarg.keys():
-            if opt not in self.cmd_options_lst:
+            if opt not in cmd_options_lst:
                 raise ValueError('option "%s" is not found in config' % opt)
-        if not set(self.cmd_necessary_opt_lst).issubset(set(kwarg.keys())):
+        if not set(cmd_necessary_opt_lst).issubset(set(kwarg.keys())):
             raise ValueError('not filled all necessary parameters!')
         for k, v in kwarg.items():
             if k == 'cmd' or k == 'umask' or k == 'workingdir' or k == 'exitcodes' or k == 'stopsignal' or k == 'user':
@@ -76,17 +101,58 @@ class Config(object):
                 if v not in dict_of_signals.values():
                     raise ValueError('bad value %s for "%s"' % (v, k))
 
-    def fullfill_kwarg(self, kwarg):
-        new_kwarg = kwarg.copy()
-        try:
-            new_kwarg = fill_param('priority', 999, new_kwarg)
-            new_kwarg = fill_param('autostart', True, new_kwarg)
-            new_kwarg = fill_param('stopwaitsecs', 10, new_kwarg)
-            new_kwarg = fill_param('umask', '022', new_kwarg)
-            new_kwarg = fill_param('stdout', 1, new_kwarg)
-            new_kwarg = fill_param('stderr', 2, new_kwarg)
-            new_kwarg = fill_param('env', os.environ, new_kwarg)
-            return new_kwarg
-        except ValueError as e:
-            raise ValueError("Can't initialize process with default values. Exiting")
+    def get_proc_conf_by_name(self, name):
+        """
+        Get ProcessConfig by name from self.lst_proc_conf
+        """
+        for proc in self.lst_proc_conf:
+            if proc.get(name):
+                return proc
+        return None
 
+    def get_lst_proc_conf(self):
+        return self.lst_proc_conf
+
+    def diff_to_active(self, new=None):
+        """
+        Get lists with added, changed and removed processes to start/restart/kill after SIGHUP
+        Says state of Taskmaster conf (changed or not)
+        :param new: new config to compare
+        :return: tuple with changed Taskmaster conf, added, changed and removed process_confs
+        """
+        if not new:
+            return False, [], [], []
+
+        added, changed, removed = [], [], []
+        for proc_conf in new.get_lst_proc_conf():
+            proc = self.get_proc_conf_by_name(proc_conf.get_name())
+            if proc:
+                if not proc.equals(proc_conf):
+                    changed.append(proc_conf)
+            else:
+                added.append(proc_conf)
+        for proc_conf in self.lst_proc_conf:
+            proc = new.get_proc_conf_by_name(proc_conf.get_name())
+            if not proc:
+                removed.append(proc_conf)
+        if self.logfile == getattr(new, 'logfile') and self.daemon == getattr(new, 'daemon'):
+            return False, added, changed, removed
+        else:
+            return True, added, changed, removed
+
+
+class ProcessConfig(object):
+    def __init__(self, config, proc_name):
+        self.proc_name = proc_name
+        for name in cmd_options_lst:
+            setattr(self, name, config[name])
+
+    def get(self, name):
+        if self.proc_name == name:
+            return self
+
+    def get_name(self):
+        return self.proc_name
+
+    def __repr__(self):
+        return self.proc_name
