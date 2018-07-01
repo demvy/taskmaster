@@ -2,15 +2,18 @@
 import logging
 import signal
 import time
+import threading
+import sys
 import os
+import socket
+from config import Config, ProcessConfig
 from datetime import datetime as dt
 
 
 class Process():
-    def __init__(self, kwarg):
-        try:
-            self.check_kwarg(kwarg)
-            new_kwarg = self.fullfill_kwarg(kwarg)
+    def __init__(self, config):
+        self.config = config
+        """
             self.cmd = new_kwarg['cmd']
             self.umask = new_kwarg['umask']
             self.workingdir = new_kwarg['workingdir']
@@ -25,29 +28,54 @@ class Process():
             self.stdout = new_kwarg['stdout']
             self.stderr = new_kwarg['stderr']
             self.env = new_kwarg['env']
-        except ValueError:
-            raise ValueError("Can't create process with such config!")
+        """
 
     def run(self):
         pass
 
+
 class TaskmasterDaemon():
     def __init__(self, config):
-        self.config = None
+        self.config = config
         #process = {'process_name' : 'state'}
         self.processes = []
-        self.nodaemon = False
-        self.logfile = None
-        self.set_config(config)
+        self.logging = logging.basicConfig(filename=config.logfile, level=logging.DEBUG)
+        #function to call for creating a thread
+        self.func = self.run_server
+        self.shutdown_flag = threading.Event()
+        self.conn = None
+
+    def do_server_stuff(self, command):
+        """
+        Make response (action) for client's command
+        Need to be implemented
+        """
+        pass
 
     def set_config(self, config):
         self.config = config
-        self.nodaemon = config['taskmasterd']['nodaemon']
-        self.logfile = config['taskmasterd']['logfile']
-        self.reparse_config(config)
 
-    def reparse_config(self, config):
-        for k, v in config.items():
+    def run(self):
+        self.func()
+
+    def run_server(self):
+        while not self.shutdown_flag.is_set():
+            try:
+                data = self.conn.recv(1024)
+            except ConnectionResetError as e:
+                data = None
+            if not data:
+                break
+            else:
+                print(data)
+                self.do_server_stuff(data)
+        conn.close()
+
+    def change_config(self, new_config):
+        reloading, added, changed, removed = config.diff_to_active(new_config)
+
+        """
+        for k, v in new_config.items():
             if k != 'taskmasterd':
                 new_process_group = []
                 self.processes.append(new_process_group)
@@ -56,36 +84,40 @@ class TaskmasterDaemon():
                 for i in range(v['numprocs']):
                     proc = Process(v)
                     new_process_group.append({ proc.name : proc.status})
+        """
 
-
-
-
-new_cfg = {}
 
 def signal_handler(signum, frame):
-    global new_cfg
-    new_cfg = parse_config()
-    # implement
-    #  !!!!! reload_config()
+    global taskmasterd
+    global new_cfg, config
+    new_cfg = Config(cfg_name)
+    taskmasterd.change_config(new_cfg)
+    taskmasterd.set_config(new_cfg)
+    config = new_cfg
 
-try:
-    new_cfg = parse_config()
-    if new_cfg['taskmasterd']['nodaemon']:
-        logging.basicConfig(level=logging.DEBUG)
-    else:
-        try:
-            filename = new_cfg['taskmasterd']['logfile']
-            logging.basicConfig(filename=filename, level=logging.DEBUG)
-        except KeyError as e:
-            logging.basicConfig(filename=dt.strftime(dt.now(), '%Y.%m.%d-%H:%M:%S'), level=logging.DEBUG)
-except Exception as e:
-    print(e)
-    logging.error(e)
+
+def main(path_to_config):
+    signal.signal(signal.SIGHUP, signal_handler)
+    sock = socket.socket()
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind(('', 1337))
+    sock.listen(5)
+
+    while True:
+        conn, addr = sock.accept()
+        global config, taskmasterd
+        config = Config(path_to_config)
+        taskmasterd = TaskmasterDaemon(config)
+        taskmasterd.run()
 
 
 if __name__ == "__main__":
-    signal.signal(signal.SIGHUP, signal_handler)
-    while True:
-        time.sleep(3)
-        print(new_cfg)
-    #logging.debug("In main test logging")
+    global cfg_name
+    if sys.argv[2]:
+        if os.path.exists(sys.argv[2]) and os.path.isfile(sys.argv[2]):
+            cfg_name = sys.argv[2]
+        else:
+            cfg_name = 'taskmaster.yaml'
+    else:
+        cfg_name = 'taskmaster.yaml'
+    main(cfg_name)
