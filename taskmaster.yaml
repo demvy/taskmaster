@@ -10,7 +10,7 @@
 
 taskmasterd:
     logfile: "./taskmasterd.log"
-    nodaemon: false  # start in foreground if true; default false
+    daemon: false  # start in foreground if true; default false
 
 ls:
     cmd: "/bin/ls -l /"
