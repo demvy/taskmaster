@@ -8,6 +8,7 @@ import os
 import socket
 from config import Config, ProcessConfig
 from datetime import datetime as dt
+from server import ServerThread
 
 
 class Process():
@@ -41,16 +42,9 @@ class TaskmasterDaemon():
         self.processes = []
         self.logging = logging.basicConfig(filename=config.logfile, level=logging.DEBUG)
         #function to call for creating a thread
-        self.func = self.run_server
-        self.shutdown_flag = threading.Event()
-        self.conn = None
-
-    def do_server_stuff(self, command):
-        """
-        Make response (action) for client's command
-        Need to be implemented
-        """
-        pass
+        #self.func = self.run_server
+        #self.shutdown_flag = threading.Event()
+        #self.conn = None
 
     def set_config(self, config):
         self.config = config
@@ -58,18 +52,13 @@ class TaskmasterDaemon():
     def run(self):
         self.func()
 
-    def run_server(self):
-        while not self.shutdown_flag.is_set():
-            try:
-                data = self.conn.recv(1024)
-            except ConnectionResetError as e:
-                data = None
-            if not data:
-                break
-            else:
-                print(data)
-                self.do_server_stuff(data)
-        conn.close()
+    def choose_command(self, command):
+        """
+        Get command from server, analyze it and run start/stop/restart/status function
+        Returns response to client when end (string with status, etc..)
+        Need to implement
+        """
+        pass
 
     def change_config(self, new_config):
         reloading, added, changed, removed = config.diff_to_active(new_config)
@@ -87,7 +76,14 @@ class TaskmasterDaemon():
         """
 
 
-def signal_handler(signum, frame):
+class ExitException(Exception):
+    """
+    Exception class showing we got SIGINT
+    """
+    pass
+
+
+def sighup_handler(signum, frame):
     global taskmasterd
     global new_cfg, config
     new_cfg = Config(cfg_name)
@@ -96,8 +92,14 @@ def signal_handler(signum, frame):
     config = new_cfg
 
 
+def sigint_handler(signum, frame):
+    raise ExitException('You have pressed Ctrl+C')
+
+
 def main(path_to_config):
-    signal.signal(signal.SIGHUP, signal_handler)
+    signal.signal(signal.SIGHUP, sighup_handler)
+    signal.signal(signal.SIGINT, sigint_handler)
+
     sock = socket.socket()
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.bind(('', 1337))
@@ -105,6 +107,10 @@ def main(path_to_config):
 
     while True:
         conn, addr = sock.accept()
+
+        # do server thread like in server.py main func
+        # Taskmasterd will be in one thread, instance of server - in other
+        # for new client connection, make new thread which can call taskmaster.choose_command(command)
         global config, taskmasterd
         config = Config(path_to_config)
         taskmasterd = TaskmasterDaemon(config)
