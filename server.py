@@ -1,33 +1,34 @@
 #!/usr/bin/env python
 
 import socket
-import os
-import subprocess
-import _thread
 import threading
 
-def client_entire(conn):
-    while True:
-        try:
-            data = conn.recv(1024)
-        except ConnectionResetError as e:
-            data = None
-        if not data:
-            break
-        else:
-            print(data)
-            conn.send(data)
-    conn.close()
 
-class myThread (threading.Thread):
-   def __init__(self, threadID, conn):
-      threading.Thread.__init__(self)
-      self.threadID = threadID
-      self.conn = conn
-   def run(self):
-      print("Starting id %s" % self.threadID)
-      client_entire(self.conn)
-      print("Exiting %s" % self.threadID)
+class ServerThread(threading.Thread):
+    def __init__(self, threadID, conn, caller=None):
+        threading.Thread.__init__(self)
+        self.threadID = threadID
+        self.conn = conn
+        self.call_back_server = caller
+
+    def run(self):
+        print("Starting id %s" % self.threadID)
+        self.server_entire()
+        print("Exiting %s" % self.threadID)
+
+    def server_entire(self):
+        while True:
+            try:
+                data = self.conn.recv(1024)
+            except ConnectionResetError as e:
+                data = None
+            if not data:
+                break
+            else:
+                print(data)
+                #response = self.call_back_server.choose_command(data)
+                self.conn.send(data)
+        self.conn.close()
 
 
 if __name__ == "__main__":
@@ -57,7 +58,7 @@ if __name__ == "__main__":
         print('connected:', addr)
 
         try:
-            new_thread = myThread(1, conn)
+            new_thread = ServerThread(1, conn)
             new_thread.start()
             print(new_thread.getName())
             #new_thread.join()
