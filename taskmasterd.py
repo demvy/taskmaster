@@ -8,12 +8,16 @@ import os
 import socket
 from config import Config, ProcessConfig
 from datetime import datetime as dt
-from server import ServerThread
+from server import listening_thread
+
+threads = []
+taskmasterd = None
 
 
-class Process():
+class Process(object):
     def __init__(self, config):
         self.config = config
+        self.state = 'starting'
         """
             self.cmd = new_kwarg['cmd']
             self.umask = new_kwarg['umask']
@@ -34,23 +38,53 @@ class Process():
     def run(self):
         pass
 
+    def __repr__(self):
+        return self.config.proc_name
 
-class TaskmasterDaemon():
+    def get_by_name(self, name):
+        if self.config.proc_name == name:
+            return self
+        return None
+
+
+class TaskmasterDaemon(object):
     def __init__(self, config):
         self.config = config
         #process = {'process_name' : 'state'}
         self.processes = []
         self.logging = logging.basicConfig(filename=config.logfile, level=logging.DEBUG)
-        #function to call for creating a thread
-        #self.func = self.run_server
-        #self.shutdown_flag = threading.Event()
-        #self.conn = None
 
     def set_config(self, config):
         self.config = config
 
     def run(self):
-        self.func()
+        self.create_processes()
+        self.run_processes()
+        while True:
+            """
+            Need to implement monitoring system:
+                Every 1-2 seconds get states from all processes and write in Taskmaster variable
+                - get values
+                - lock()
+                - write_values
+                - unlock()
+            """
+            pass
+
+    def create_processes(self):
+        """
+        Creates all processes from config
+        """
+        for proc_conf in self.config.lst_proc_conf:
+            process = Process(proc_conf)
+            self.processes.append(process)
+
+    def run_processes(self):
+        """
+        Run each process from config
+        """
+        for proc in self.processes:
+            proc.run()
 
     def choose_command(self, command):
         """
@@ -97,24 +131,27 @@ def sigint_handler(signum, frame):
 
 
 def main(path_to_config):
+    global threads, config, taskmasterd
     signal.signal(signal.SIGHUP, sighup_handler)
     signal.signal(signal.SIGINT, sigint_handler)
 
-    sock = socket.socket()
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.bind(('', 1337))
-    sock.listen(5)
+    # do server thread like in server.py main func
+    # Taskmasterd will be in one thread, instance of server - in other
+    # for new client connection, make new thread which can call taskmaster.choose_command(command)
 
-    while True:
-        conn, addr = sock.accept()
-
-        # do server thread like in server.py main func
-        # Taskmasterd will be in one thread, instance of server - in other
-        # for new client connection, make new thread which can call taskmaster.choose_command(command)
-        global config, taskmasterd
+    try:
+        listen_thread = threading.Thread(listening_thread)
         config = Config(path_to_config)
         taskmasterd = TaskmasterDaemon(config)
         taskmasterd.run()
+    except ExitException:
+        print ("Error: unable to start thread")
+        for thread in threads:
+            thread.shutdown_flag.set()
+        for thread in threads:
+            thread.join()
+        listen_thread.join()
+
 
 
 if __name__ == "__main__":
