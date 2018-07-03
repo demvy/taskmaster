@@ -2,6 +2,7 @@
 
 import socket
 import threading
+from taskmasterd import threads, taskmasterd
 
 
 class ServerThread(threading.Thread):
@@ -10,6 +11,10 @@ class ServerThread(threading.Thread):
         self.threadID = threadID
         self.conn = conn
         self.call_back_server = caller
+        self.shutdown_flag = threading.Event()
+
+    def set_caller(self, caller):
+        self.call_back_server = caller
 
     def run(self):
         print("Starting id %s" % self.threadID)
@@ -17,7 +22,7 @@ class ServerThread(threading.Thread):
         print("Exiting %s" % self.threadID)
 
     def server_entire(self):
-        while True:
+        while not self.shutdown_flag.is_set():
             try:
                 data = self.conn.recv(1024)
             except ConnectionResetError as e:
@@ -29,6 +34,29 @@ class ServerThread(threading.Thread):
                 #response = self.call_back_server.choose_command(data)
                 self.conn.send(data)
         self.conn.close()
+
+
+def listening_thread():
+    global threads
+    sock = socket.socket()
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind(('', 1337))
+    sock.listen(5)
+
+    while True:
+        try:
+            conn, addr = sock.accept()
+        except KeyboardInterrupt as e:
+            raise ValueError("Can't accept new connection")
+        try:
+            server_thread = ServerThread(1, conn)
+            server_thread.start()
+            server_thread.set_caller(taskmasterd)
+            threads.append(server_thread)
+            print(server_thread.getName())
+        except:
+            print ("Error: unable to start thread")
+            conn.close()
 
 
 if __name__ == "__main__":
