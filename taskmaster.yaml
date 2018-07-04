@@ -15,7 +15,7 @@ taskmasterd:
 ls:
     cmd: "/bin/ls -l /"
     numprocs: 1          # number of processes copies to start (def 1)
-    umasc: '022'           # umasc for files created by proc
+    umask: '022'           # umask for files created by proc
     workingdir: "/tmp"   # directory to cwd to before exec (def no cwd)
     priority: 999        # the relative start priority (default 999)
     autostart: true      # start at taskmasterd start (default: true)
@@ -35,7 +35,7 @@ ls:
 mycom1:
     cmd: "/bin/ls -l | cat | wc -l"
     numprocs: 1          # number of processes copies to start (def 1)
-    umasc: '022'          # umasc for files created by proc
+    umask: '022'          # umask for files created by proc
     workingdir: "/tmp"   # directory to cwd to before exec (def no cwd)
     priority: 999        # the relative start priority (default 999)
     autostart: true      # start at taskmasterd start (default: true)
@@ -52,6 +52,3 @@ mycom1:
         B: ura
         FOO: bar
         A: 1
-
-mycom1111:
-    cmd: "govno i jopi"
