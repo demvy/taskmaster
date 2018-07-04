@@ -8,10 +8,33 @@ import os
 import socket
 from config import Config, ProcessConfig
 from datetime import datetime as dt
-from server import listening_thread
+from server import ServerThread
 
 threads = []
 taskmasterd = None
+
+
+def listening_thread():
+    global threads
+    sock = socket.socket()
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind(('', 1337))
+    sock.listen(5)
+
+    while True:
+        try:
+            conn, addr = sock.accept()
+        except KeyboardInterrupt as e:
+            raise ValueError("Can't accept new connection")
+        try:
+            server_thread = ServerThread(1, conn)
+            server_thread.start()
+            server_thread.set_caller(taskmasterd)
+            threads.append(server_thread)
+            print(server_thread.getName())
+        except:
+            print ("Error: unable to start thread")
+            conn.close()
 
 
 class Process(object):
@@ -60,6 +83,7 @@ class TaskmasterDaemon(object):
     def run(self):
         self.create_processes()
         self.run_processes()
+        print("In taskmaster run!")
         while True:
             """
             Need to implement monitoring system:
@@ -140,7 +164,7 @@ def main(path_to_config):
     # for new client connection, make new thread which can call taskmaster.choose_command(command)
 
     try:
-        listen_thread = threading.Thread(listening_thread)
+        listen_thread = threading.Thread(target=listening_thread)
         config = Config(path_to_config)
         taskmasterd = TaskmasterDaemon(config)
         taskmasterd.run()
@@ -153,12 +177,11 @@ def main(path_to_config):
         listen_thread.join()
 
 
-
 if __name__ == "__main__":
     global cfg_name
-    if sys.argv[2]:
-        if os.path.exists(sys.argv[2]) and os.path.isfile(sys.argv[2]):
-            cfg_name = sys.argv[2]
+    if sys.argv[1]:
+        if os.path.exists(sys.argv[1]) and os.path.isfile(sys.argv[1]):
+            cfg_name = sys.argv[1]
         else:
             cfg_name = 'taskmaster.yaml'
     else:
