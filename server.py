@@ -2,7 +2,7 @@
 
 import socket
 import threading
-from taskmasterd import threads, taskmasterd
+#from taskmasterd import threads, taskmasterd
 
 
 class ServerThread(threading.Thread):
@@ -34,29 +34,6 @@ class ServerThread(threading.Thread):
                 #response = self.call_back_server.choose_command(data)
                 self.conn.send(data)
         self.conn.close()
-
-
-def listening_thread():
-    global threads
-    sock = socket.socket()
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.bind(('', 1337))
-    sock.listen(5)
-
-    while True:
-        try:
-            conn, addr = sock.accept()
-        except KeyboardInterrupt as e:
-            raise ValueError("Can't accept new connection")
-        try:
-            server_thread = ServerThread(1, conn)
-            server_thread.start()
-            server_thread.set_caller(taskmasterd)
-            threads.append(server_thread)
-            print(server_thread.getName())
-        except:
-            print ("Error: unable to start thread")
-            conn.close()
 
 
 if __name__ == "__main__":
