@@ -4,7 +4,7 @@ import os
 
 cmd_options_lst = ['cmd', 'umask', 'workingdir', 'priority', 'autostart', 'startsecs', 'autorestart',
                    'exitcodes', 'startretries', 'starttime', 'stopsignal', 'stopwaitsecs', 'user', 'stdout',
-                   'stderr', 'env']
+                   'stderr', 'env', 'numprocs']
 cmd_necessary_opt_lst = ['cmd', 'workingdir', 'startsecs', 'exitcodes', 'starttime', 'startretries',
                          'stopsignal', 'user']
 
@@ -17,16 +17,17 @@ class Config(object):
 
     def __init__(self, conf_name):
         """Return Config object with given dict of options or {}"""
-        options = self.read_from_config_file(conf_name)
-        for d in options.pop('taskmasterd', None).keys():
-            self.check_kwarg(options.get(d))
+        options = dict(self.read_from_config_file(conf_name))
+        user_ps = dict((i, options[i]) for i in options if i!='taskmasterd')
+        for d in user_ps.keys():
+            self.check_kwarg(user_ps.get(d))
         self.check_daemon_conf(options.get('taskmasterd', {}))
         taskmasterd_opt = options.get('taskmasterd', {})
         self.logfile = taskmasterd_opt.get('logfile', 'taskmasterd.log')
         self.daemon = taskmasterd_opt.get('daemon', False)
-        self.jobs_amount = len(options.pop('taskmasterd'))
+        self.jobs_amount = len(user_ps)
         self.lst_proc_conf = []
-        self.create_proc_confs(options.pop('taskmasterd'))
+        self.create_proc_confs(user_ps)
 
     def create_proc_confs(self, options):
         # For each process config fill params and add Process conf to list of confs
@@ -62,7 +63,8 @@ class Config(object):
         """
         with open(filename, 'r') as ymlfile:
             try:
-                self.options = yaml.load(ymlfile)
+                options = yaml.load(ymlfile)
+                return options
             except yaml.YAMLError as exc:
                 raise exc
 
@@ -76,6 +78,7 @@ class Config(object):
             raise ValueError('bad options in taskmasterd config')
 
     def check_kwarg(self, kwarg):
+        print(kwarg)
         for opt in kwarg.keys():
             if opt not in cmd_options_lst:
                 raise ValueError('option "%s" is not found in config' % opt)
