@@ -3,7 +3,7 @@ import signal
 import os
 
 cmd_options_lst = ['cmd', 'umask', 'workingdir', 'priority', 'autostart', 'startsecs', 'autorestart',
-                   'exitcodes', 'startretries', 'starttime', 'stopsignal', 'stopwaitsecs', 'user', 'stdout',
+                   'exitcodes', 'startretries', 'stopsignal', 'stopwaitsecs', 'user', 'stdout',
                    'stderr', 'env', 'numprocs']
 cmd_necessary_opt_lst = ['cmd', 'startsecs', 'exitcodes', 'startretries',
                          'stopsignal', 'numprocs', 'umask', 'autostart', 'autorestart',
@@ -35,15 +35,15 @@ class Config(object):
         for k, v in options.items():
             conf = dict()
             for name, value in v.items():
-                setattr(conf, name, value)
-            setattr(conf, 'priority', conf.get('priority', 999))
-            setattr(conf, 'autostart', conf.get('autostart', True))
-            setattr(conf, 'stopwaitsecs', conf.get('stopwaitsecs', 10))
-            setattr(conf, 'umask', conf.get('umask', '022'))
-            setattr(conf, 'stdout', conf.get('stdout', 1))
-            setattr(conf, 'stderr', conf.get('stderr', 2))
-            setattr(conf, 'env', conf.get('env', os.environ))
-            setattr(conf, 'logfile', self.logfile)
+                conf[name] = value
+            conf['priority'] = conf.get('priority', 999)
+            conf['autostart'] = conf.get('autostart', True)
+            conf['stopwaitsecs'] = conf.get('stopwaitsecs', 10)
+            conf['umask'] = conf.get('umask', '022')
+            conf['stdout'] = conf.get('stdout', 1)
+            conf['stderr'] = conf.get('stderr', 2)
+            conf['env'] = conf.get('env', os.environ)
+            conf['logfile'] = self.logfile
             proc_conf = ProcessConfig(conf, k)
             self.lst_proc_conf.append(proc_conf)
 
@@ -87,15 +87,16 @@ class Config(object):
             raise ValueError('not filled all necessary parameters!')
         for k, v in kwarg.items():
             if k == 'cmd' or k == 'umask' or k == 'workingdir' or k == 'exitcodes' or k == 'stopsignal' or k == 'user':
-                if not isinstance(k, str):
+                if not isinstance(v, str):
                     raise ValueError('bad presentation of "%s"' % k)
-            if k == 'umask' and not k.isnumeric():
+            if k == 'umask' and not v.isnumeric():
                 raise ValueError('bad value for "%s"' % k)
             if k == 'numprocs' or k == 'priority' or k == 'startsecs' or k == 'startretries' or k == 'stopwaitsecs':
-                if not isinstance(k, int):
+                if not isinstance(v, int):
                     raise ValueError('bad presentation of "%s"' % k)
-            if k == 'numprocs' or k == 'startsecs' or k == 'startretries' or k == 'stopwaitsecs' and k < 0 or k > 1000:
-                raise ValueError('bad value for "%s"' % k)
+            if k == 'numprocs' or k == 'startsecs' or k == 'startretries' or k == 'stopwaitsecs':
+                if v < 0 or v > 1000:
+                    raise ValueError('bad value for "%s"' % k)
             if k == 'exitcodes':
                 lst = [int(i) for i in v.split(',')]
                 if False in list(map(lambda x: False if x not in range(256) else True, lst)):
@@ -148,8 +149,8 @@ class Config(object):
 class ProcessConfig(object):
     def __init__(self, config, proc_name):
         self.proc_name = proc_name
-        for name in cmd_options_lst:
-            setattr(self, name, config[name])
+        for name, value in config.items():
+            setattr(self, name, value)
 
     def get(self, name):
         if self.proc_name == name:
