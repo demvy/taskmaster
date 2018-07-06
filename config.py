@@ -5,8 +5,9 @@ import os
 cmd_options_lst = ['cmd', 'umask', 'workingdir', 'priority', 'autostart', 'startsecs', 'autorestart',
                    'exitcodes', 'startretries', 'starttime', 'stopsignal', 'stopwaitsecs', 'user', 'stdout',
                    'stderr', 'env', 'numprocs']
-cmd_necessary_opt_lst = ['cmd', 'workingdir', 'startsecs', 'exitcodes', 'starttime', 'startretries',
-                         'stopsignal', 'user']
+cmd_necessary_opt_lst = ['cmd', 'startsecs', 'exitcodes', 'startretries',
+                         'stopsignal', 'numprocs', 'umask', 'autostart', 'autorestart',
+                         'stopwaitsecs', 'stdout', 'stderr', 'env', 'workingdir']
 
 
 class Config(object):
