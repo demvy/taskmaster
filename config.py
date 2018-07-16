@@ -1,6 +1,8 @@
 import yaml
 import signal
 import os
+import shlex
+import stat
 
 cmd_options_lst = ['cmd', 'umask', 'workingdir', 'priority', 'autostart', 'startsecs', 'autorestart',
                    'exitcodes', 'startretries', 'stopsignal', 'stopwaitsecs', 'user', 'stdout',
@@ -161,3 +163,73 @@ class ProcessConfig(object):
 
     def __repr__(self):
         return self.proc_name
+
+    def stat(self, filename):
+        return os.stat(filename)
+
+    def get_path(self):
+        """Return a list corresponding to $PATH, or a default."""
+        path = ["/bin", "/usr/bin", "/usr/local/bin"]
+        if "PATH" in os.environ:
+            p = os.environ["PATH"]
+            if p:
+                path = p.split(os.pathsep)
+        return path
+
+    def check_execv_args(self, filename, argv, st):
+        """
+        Check command arguments to pass to execve
+        """
+        if st is None:
+            raise ValueError("can't find command %r" % filename)
+
+        elif stat.S_ISDIR(st[stat.ST_MODE]):
+            raise ValueError("command at %r is a directory" % filename)
+
+        elif not (stat.S_IMODE(st[stat.ST_MODE]) & 0o111):
+            raise ValueError("command at %r is not executable" % filename)
+
+        elif not os.access(filename, os.X_OK):
+            raise ValueError("no permission to run command %r" % filename)
+
+    def check_cmd(self):
+        """
+        Check command and arguments, return splitted ones for exec
+        """
+        try:
+            commandargs = shlex.split(self.cmd)
+        except ValueError as e:
+            raise ValueError("can't parse command %r: %s" % (self.cmd, str(e)))
+
+        if commandargs:
+            program = commandargs[0]
+        else:
+            raise ValueError("command is empty")
+
+        if "/" in program:
+            filename = program
+            try:
+                st = self.stat(filename)
+            except OSError:
+                st = None
+
+        else:
+            path = self.get_path()
+            found = None
+            st = None
+            for dir in path:
+                found = os.path.join(dir, program)
+                try:
+                    st = self.stat(found)
+                except OSError:
+                    pass
+                else:
+                    break
+            if st is None:
+                filename = program
+            else:
+                filename = found
+
+        self.check_execv_args(filename, commandargs, st)
+        return filename, commandargs
+

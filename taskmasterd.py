@@ -38,9 +38,18 @@ def listening_thread():
 
 
 class Process(object):
+    config = None
+    state = ''
+    pid = 0
+    laststart = 0
+    laststop = 0
+    delay = 0
+    startretries = 0
+
     def __init__(self, config):
         self.config = config
-        self.state = 'starting'
+        self.state = 'stopped'
+
         """
             self.cmd = new_kwarg['cmd']
             self.umask = new_kwarg['umask']
