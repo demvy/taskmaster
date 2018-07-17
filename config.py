@@ -233,3 +233,7 @@ class ProcessConfig(object):
         self.check_execv_args(filename, commandargs, st)
         return filename, commandargs
 
+    def get_env(self):
+        new_env = os.environ
+        new_env.update(self.env)
+        return new_env

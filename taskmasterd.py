@@ -68,7 +68,22 @@ class Process(object):
         """
 
     def run(self):
-        pass
+        if self.pid:
+            msg = 'process \'%s\' already running' % self.config.proc_name
+            #options.logger.warn(msg)
+            return
+
+        self.laststart = time.time()
+        self.state = 'starting'
+        try:
+            filename, argv = self.config.get_execv_args()
+        except ValueError as what:
+            self.state = 'backoff'
+            self.startretries += 1
+            return
+
+        #need to implement fork and execve
+
 
     def __repr__(self):
         return self.config.proc_name
