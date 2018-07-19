@@ -6,6 +6,9 @@ import threading
 import sys
 import os
 import socket
+import pwd
+import grp
+import errno
 from config import Config, ProcessConfig
 from datetime import datetime as dt
 from server import ServerThread
@@ -67,6 +70,50 @@ class Process(object):
             self.env = new_kwarg['env']
         """
 
+    def drop_priviledges(self, user):
+        if user is None:
+            return "No user specified to setuid to!"
+
+        try:
+            uid = int(user)
+        except ValueError:
+            try:
+                pwrec = pwd.getpwnam(user)
+            except KeyError:
+                return "Can't find username %r" % user
+            uid = pwrec[2]
+        else:
+            try:
+                pwrec = pwd.getpwuid(uid)
+            except KeyError:
+                return "Can't find uid %r" % uid
+
+        current_uid = os.getuid()
+        if current_uid == uid:
+            return
+        if current_uid != 0:
+            return "Can't drop privilege as nonroot user"
+
+        gid = pwrec[3]
+        if hasattr(os, 'setgroups'):
+            user = pwrec[0]
+            groups = [grprec[2] for grprec in grp.getgrall() if user in
+                      grprec[3]]
+            groups.insert(0, gid)
+            try:
+                os.setgroups(groups)
+            except OSError:
+                return 'Could not set groups of effective user'
+        try:
+            os.setgid(gid)
+        except OSError:
+            return 'Could not set group id of effective user'
+        os.setuid(uid)
+        return "User set for the process"
+
+    def set_uid(self, user):
+        return self.drop_priviledges(user)
+
     def run(self):
         if self.pid:
             msg = 'process \'%s\' already running' % self.config.proc_name
@@ -82,8 +129,45 @@ class Process(object):
             self.startretries += 1
             return
 
-        #need to implement fork and execve
-
+        try:
+            pid = os.fork()
+            if not pid:
+                os.setpgrp()
+                os.dup2(self.config.stdout, 1)
+                os.dup2(self.config.stderr, 2)
+                for i in range(3, 1024):
+                    try:
+                        os.close(i)
+                    except OSError:
+                        pass
+                user = getattr(self.config, 'user', None)
+                out = self.set_uid(user)
+                if out:
+                    #TODO: logger to write output
+                    pass
+                env = self.config.get_env()
+                cwd = self.config.workingdir
+                if cwd is not None:
+                    try:
+                        os.chdir(cwd)
+                    except OSError as why:
+                        code = errno.errorcode.get(why.args[0], why.args[0])
+                        msg = "couldn't chdir to %s: %s\n" % (cwd, code)
+                        #TODO: logger to write error message
+                        return
+                try:
+                    if self.config.umask is not None:
+                        os.umask(self.config.umask)
+                    os.execve(filename, argv, env)
+                except OSError as why:
+                    code = errno.errorcode.get(why.args[0], why.args[0])
+                    msg = "couldn't exec %s: %s\n" % (argv[0], code)
+                    #TODO: logger to write error
+        except OSError:
+            pass
+        finally:
+            #TODO: logger - child process was not spawned
+            os._exit(127) # exit process with code for spawn failure
 
     def __repr__(self):
         return self.config.proc_name

@@ -234,6 +234,6 @@ class ProcessConfig(object):
         return filename, commandargs
 
     def get_env(self):
-        new_env = os.environ
+        new_env = os.environ.copy()
         new_env.update(self.env)
         return new_env
