@@ -32,23 +32,23 @@ ls:
         FOO: bar
         A: 1
         
-mycom1:
-    cmd: bash -c "/bin/ls -l | cat | wc -l"
-    numprocs: 1          # number of processes copies to start (def 1)
-    umask: '022'          # umask for files created by proc
-    workingdir: "/tmp"   # directory to cwd to before exec (def no cwd)
-    priority: 999        # the relative start priority (default 999)
-    autostart: true      # start at taskmasterd start (default: true)
-    startsecs: 1         # of secs prog must stay up to be running
-    startretries: 3      # max of serial start failures when starting
-    autorestart: unexpected # when to restart if exited after running
-    exitcodes: 0, 3       # 'expected' exit codes used with autorestart
-    stopsignal: SIGKILL     # signal used to kill process
-    stopwaitsecs: 5     # max num secs to wait b4 SIGKILL (default 10)
-    user: vdemeshk       # setuid to this UNIX account to run the program
-    stdout: 0            # fd or path to file of stdout
-    stderr: 2            # fd or path to file of stderr
-    env:
-        B: ura
-        FOO: bar
-        A: 1
+#mycom1:
+#    cmd: bash -c "/bin/ls -l | cat | wc -l"
+#    numprocs: 1          # number of processes copies to start (def 1)
+#    umask: '022'          # umask for files created by proc
+#    workingdir: "/tmp"   # directory to cwd to before exec (def no cwd)
+#    priority: 999        # the relative start priority (default 999)
+#    autostart: true      # start at taskmasterd start (default: true)
+#    startsecs: 1         # of secs prog must stay up to be running
+#    startretries: 3      # max of serial start failures when starting
+#    autorestart: unexpected # when to restart if exited after running
+#    exitcodes: 0, 3       # 'expected' exit codes used with autorestart
+#    stopsignal: SIGKILL     # signal used to kill process
+#    stopwaitsecs: 5     # max num secs to wait b4 SIGKILL (default 10)
+#    user: vdemeshk       # setuid to this UNIX account to run the program
+#    stdout: 0            # fd or path to file of stdout
+#    stderr: 2            # fd or path to file of stderr
+#    env:
+#        B: ura
+#        FOO: bar
+#        A: 1

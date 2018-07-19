@@ -115,6 +115,7 @@ class Process(object):
         return self.drop_priviledges(user)
 
     def run(self):
+        print(self.config.proc_name)
         if self.pid:
             msg = 'process \'%s\' already running' % self.config.proc_name
             #options.logger.warn(msg)
@@ -123,7 +124,7 @@ class Process(object):
         self.laststart = time.time()
         self.state = 'starting'
         try:
-            filename, argv = self.config.get_execv_args()
+            filename, argv = self.config.check_cmd()
         except ValueError as what:
             self.state = 'backoff'
             self.startretries += 1
@@ -132,6 +133,7 @@ class Process(object):
         try:
             pid = os.fork()
             if not pid:
+                print("ggggggggw")
                 os.setpgrp()
                 os.dup2(self.config.stdout, 1)
                 os.dup2(self.config.stderr, 2)
@@ -156,9 +158,12 @@ class Process(object):
                         #TODO: logger to write error message
                         return
                 try:
+                    print("44444444444444")
                     if self.config.umask is not None:
-                        os.umask(self.config.umask)
+                        os.umask(int(self.config.umask))
+                    print(filename, argv, env)
                     os.execve(filename, argv, env)
+                    print("555555555555555555")
                 except OSError as why:
                     code = errno.errorcode.get(why.args[0], why.args[0])
                     msg = "couldn't exec %s: %s\n" % (argv[0], code)
@@ -167,7 +172,8 @@ class Process(object):
             pass
         finally:
             #TODO: logger - child process was not spawned
-            os._exit(127) # exit process with code for spawn failure
+            print("333333333333333")
+            #os._exit(127) # exit process with code for spawn failure
 
     def __repr__(self):
         return self.config.proc_name
@@ -275,6 +281,7 @@ def main(path_to_config):
         listen_thread = threading.Thread(target=listening_thread)
         config = Config(path_to_config)
         taskmasterd = TaskmasterDaemon(config)
+        print("httttt")
         taskmasterd.run()
     except ExitException:
         print ("Error: unable to start thread")
