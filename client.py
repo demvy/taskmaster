@@ -29,7 +29,7 @@ def main():
 
 	try:
 		sock.connect(('localhost', 1337))
-	except ConnectionRefusedError as e:
+	except socket.error as e:
 		sock.close()
 		exit()
 
@@ -48,7 +48,7 @@ def main():
 		try:
 			sock.send(''.join([string, ]).encode())
 			data = sock.recv(1024).decode()
-		except BrokenPipeError as e:
+		except Exception as e:
 			break
 	
 		print(data)
