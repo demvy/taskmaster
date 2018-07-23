@@ -31,10 +31,8 @@ def listening_thread():
             raise ValueError("Can't accept new connection")
         try:
             server_thread = ServerThread(1, conn)
-            server_thread.start()
             server_thread.set_caller(taskmasterd)
-            threads.append(server_thread)
-            print(server_thread.getName())
+            server_thread.run()
         except:
             print ("Error: unable to start thread")
             conn.close()
@@ -114,6 +112,18 @@ class Process(object):
     def set_uid(self, user):
         return self.drop_priviledges(user)
 
+    def get_fd(self, option):
+        print(option)
+        if isinstance(option, int):
+            return option
+        else:
+            if isinstance(option, str):
+                try:
+                    file = os.open(option, os.O_CREAT | os.O_WRONLY | os.O_APPEND)
+                    return file
+                except Exception:
+                    raise ValueError("Can't open file for pipe %s" % option)
+
     def run(self):
         print(self.config.proc_name)
         if self.pid:
@@ -132,11 +142,14 @@ class Process(object):
 
         try:
             pid = os.fork()
-            if not pid:
+            if pid == 0:
                 print("ggggggggw")
                 os.setpgrp()
-                os.dup2(self.config.stdout, 1)
-                os.dup2(self.config.stderr, 2)
+                #TODO: write function in config to prepare stdout fd and stderr, open file, write it's fileObject to config var
+                #TODO: take this fileObj var and do fileno()
+                #TODO: when close all, close(fileObject)
+                os.dup2(self.get_fd(self.config.stdout), 1)
+                os.dup2(self.get_fd(self.config.stderr), 2)
                 for i in range(3, 1024):
                     try:
                         os.close(i)
@@ -168,12 +181,13 @@ class Process(object):
                     code = errno.errorcode.get(why.args[0], why.args[0])
                     msg = "couldn't exec %s: %s\n" % (argv[0], code)
                     #TODO: logger to write error
-        except OSError:
-            pass
+            else:
+                self.pid = pid
         finally:
             #TODO: logger - child process was not spawned
             print("333333333333333")
-            #os._exit(127) # exit process with code for spawn failure
+            #os.write(2, b"taskmasterd: child process was not spawned\n")
+            #os._exit(127)  # exit process with code for spawn failure
 
     def __repr__(self):
         return self.config.proc_name
@@ -182,6 +196,22 @@ class Process(object):
         if self.config.proc_name == name:
             return self
         return None
+
+    def kill(self, signal):
+        if self.state == 'backoff':
+            self.state = 'stopped'
+            return
+        if not self.pid:
+            #TODO: logger -> tried to kill not running process
+            pass
+        self.delay = time.time() + self.config.stopwaitsecs
+        self.state = 'stopping'
+        try:
+            os.kill(self.pid, signal)
+        except Exception:
+            self.pid = 0
+            self.state = 'unknown'
+            self.delay = 0
 
 
 class TaskmasterDaemon(object):
@@ -199,6 +229,8 @@ class TaskmasterDaemon(object):
         self.run_processes()
         print("In taskmaster run!")
         while True:
+            line = input("> ")
+            print("Entered: %s" % line)
             """
             Need to implement monitoring system:
                 Every 1-2 seconds get states from all processes and write in Taskmaster variable
@@ -207,7 +239,6 @@ class TaskmasterDaemon(object):
                 - write_values
                 - unlock()
             """
-            pass
 
     def create_processes(self):
         """
@@ -216,6 +247,10 @@ class TaskmasterDaemon(object):
         for proc_conf in self.config.lst_proc_conf:
             process = Process(proc_conf)
             self.processes.append(process)
+
+    def kill_processes(self, signal):
+        for proc in self.processes:
+            proc.kill(signal)
 
     def run_processes(self):
         """
@@ -278,17 +313,16 @@ def main(path_to_config):
     # for new client connection, make new thread which can call taskmaster.choose_command(command)
 
     try:
-        listen_thread = threading.Thread(target=listening_thread)
+        global listen_thread#, job_thread
+        listen_thread = threading.Thread(name='listener', target=listening_thread)
+        listen_thread.setDaemon(True)
+        listen_thread.start()
         config = Config(path_to_config)
         taskmasterd = TaskmasterDaemon(config)
-        print("httttt")
         taskmasterd.run()
     except ExitException:
         print ("Error: unable to start thread")
-        for thread in threads:
-            thread.shutdown_flag.set()
-        for thread in threads:
-            thread.join()
+        taskmasterd.kill_processes(signal.SIGINT)
         listen_thread.join()
 
 

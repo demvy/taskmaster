@@ -235,5 +235,6 @@ class ProcessConfig(object):
 
     def get_env(self):
         new_env = os.environ.copy()
+        self.env = {str(k): str(v) for k, v in self.env.items()}
         new_env.update(self.env)
         return new_env

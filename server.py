@@ -5,9 +5,9 @@ import threading
 #from taskmasterd import threads, taskmasterd
 
 
-class ServerThread(threading.Thread):
+class ServerThread():#threading.Thread):
     def __init__(self, threadID, conn, caller=None):
-        threading.Thread.__init__(self)
+        #threading.Thread.__init__(self)
         self.threadID = threadID
         self.conn = conn
         self.call_back_server = caller
