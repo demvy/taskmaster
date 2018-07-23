@@ -26,7 +26,7 @@ ls:
     stopsignal: SIGQUIT     # signal used to kill process
     stopwaitsecs: 10     # max num secs to wait b4 SIGKILL (default 10)
     user: vdemeshk       # setuid to this UNIX account to run the program
-    stdout: 0            # fd or path to file of stdout
+    stdout: 1            # fd or path to file of stdout
     stderr: 2            # fd or path to file of stderr
     env:
         FOO: bar
