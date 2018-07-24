@@ -46,8 +46,30 @@ class Config(object):
             conf['stderr'] = conf.get('stderr', 2)
             conf['env'] = conf.get('env', os.environ)
             conf['logfile'] = self.logfile
+            conf['stdout'] = self.get_fd(conf['stdout'])
+            conf['stderr'] = self.get_fd(conf['stderr'])
             proc_conf = ProcessConfig(conf, k)
             self.lst_proc_conf.append(proc_conf)
+
+    def get_fd(self, option):
+        print(option)
+        if isinstance(option, int):
+            return option
+        else:
+            if isinstance(option, str):
+                try:
+                    file = os.open(option, os.O_CREAT | os.O_WRONLY | os.O_APPEND)
+                    return file
+                except Exception:
+                    #TODO: logger->Can't open file for pipe %s" % option
+                    pass
+            else:
+                try:
+                    fd = int(option)
+                    return fd
+                except Exception:
+                    #TODO: logger->Bad type for fd %s" % option
+                    pass
 
     def set_options(self, opt):
         """Set dict of options"""
