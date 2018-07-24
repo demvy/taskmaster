@@ -18,7 +18,6 @@ taskmasterd = None
 
 
 def listening_thread():
-    global threads
     sock = socket.socket()
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.bind(('', 1337))
@@ -50,23 +49,6 @@ class Process(object):
     def __init__(self, config):
         self.config = config
         self.state = 'stopped'
-
-        """
-            self.cmd = new_kwarg['cmd']
-            self.umask = new_kwarg['umask']
-            self.workingdir = new_kwarg['workingdir']
-            self.priority = new_kwarg['priority']
-            self.autostart = new_kwarg['autostart']
-            self.autorestart = new_kwarg['autorestart']
-            self.exitcodes = [int(i) for i in new_kwarg['exitcodes'].split(',')]
-            self.startretries = new_kwarg['startretries']
-            self.startsecs = new_kwarg['starttime']
-            self.stopsignal = new_kwarg['stopsignal']
-            self.stopwaitsecs = new_kwarg['stopwaitsecs']
-            self.stdout = new_kwarg['stdout']
-            self.stderr = new_kwarg['stderr']
-            self.env = new_kwarg['env']
-        """
 
     def drop_priviledges(self, user):
         if user is None:
@@ -112,18 +94,6 @@ class Process(object):
     def set_uid(self, user):
         return self.drop_priviledges(user)
 
-    def get_fd(self, option):
-        print(option)
-        if isinstance(option, int):
-            return option
-        else:
-            if isinstance(option, str):
-                try:
-                    file = os.open(option, os.O_CREAT | os.O_WRONLY | os.O_APPEND)
-                    return file
-                except Exception:
-                    raise ValueError("Can't open file for pipe %s" % option)
-
     def run(self):
         print(self.config.proc_name)
         if self.pid:
@@ -145,11 +115,8 @@ class Process(object):
             if pid == 0:
                 print("ggggggggw")
                 os.setpgrp()
-                #TODO: write function in config to prepare stdout fd and stderr, open file, write it's fileObject to config var
-                #TODO: take this fileObj var and do fileno()
-                #TODO: when close all, close(fileObject)
-                os.dup2(self.get_fd(self.config.stdout), 1)
-                os.dup2(self.get_fd(self.config.stderr), 2)
+                os.dup2(self.config.stdout, 1)
+                os.dup2(self.config.stderr, 2)
                 for i in range(3, 1024):
                     try:
                         os.close(i)
@@ -207,6 +174,8 @@ class Process(object):
         self.delay = time.time() + self.config.stopwaitsecs
         self.state = 'stopping'
         try:
+            os.close(self.config.stdout)
+            os.close(self.config.stderr)
             os.kill(self.pid, signal)
         except Exception:
             self.pid = 0
@@ -218,6 +187,7 @@ class TaskmasterDaemon(object):
     def __init__(self, config):
         self.config = config
         #process = {'process_name' : 'state'}
+        self.proc_states = []
         self.processes = []
         self.logging = logging.basicConfig(filename=config.logfile, level=logging.DEBUG)
 
@@ -229,8 +199,15 @@ class TaskmasterDaemon(object):
         self.run_processes()
         print("In taskmaster run!")
         while True:
-            line = input("> ")
-            print("Entered: %s" % line)
+            #line = input("> ")
+            #print("Entered: %s" % line)
+            for struct in self.proc_states:
+                for k, v in struct:
+                    v = k.state
+                    struct[k] = v
+            for struct in self.proc_states:
+                print(struct)
+            time.sleep(1)
             """
             Need to implement monitoring system:
                 Every 1-2 seconds get states from all processes and write in Taskmaster variable
@@ -247,6 +224,7 @@ class TaskmasterDaemon(object):
         for proc_conf in self.config.lst_proc_conf:
             process = Process(proc_conf)
             self.processes.append(process)
+            self.proc_states.append({process, 'stopped'})
 
     def kill_processes(self, signal):
         for proc in self.processes:
