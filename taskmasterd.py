@@ -15,6 +15,8 @@ from server import ServerThread
 
 threads = []
 taskmasterd = None
+state_choice = {'S': 'sleeping', 'R': 'running', 'T': 'stopped', 't': 'stopped',
+                'Z': 'zombie', 'X': 'killed', 'x': 'killed'}
 
 
 def listening_thread():
@@ -182,11 +184,20 @@ class Process(object):
             self.state = 'unknown'
             self.delay = 0
 
+    def get_state(self):
+        try:
+            stat = open("/proc/{}/stat".format(self.pid), 'r')
+            mode = stat.readline().split()[2]
+            self.state = state_choice[mode]
+            return self.state
+        except Exception:
+            return 'killed'
+
 
 class TaskmasterDaemon(object):
     def __init__(self, config):
         self.config = config
-        #process = {'process_name' : 'state'}
+        #process = ['process_name', 'state'] # this is structure in proc_states
         self.proc_states = []
         self.processes = []
         self.logging = logging.basicConfig(filename=config.logfile, level=logging.DEBUG)
@@ -199,14 +210,14 @@ class TaskmasterDaemon(object):
         self.run_processes()
         print("In taskmaster run!")
         while True:
-            #line = input("> ")
-            #print("Entered: %s" % line)
+            for el in self.proc_states:
+                proc = self.get_proc_by_name(el[0])
+                if proc:
+                    el[1] = proc.get_state()
+
+            print("%-20s|%-10s" % ("Process", "State"))
             for struct in self.proc_states:
-                for k, v in struct:
-                    v = k.state
-                    struct[k] = v
-            for struct in self.proc_states:
-                print(struct)
+                print("{:20}|{:10}".format(struct[0], struct[1]))
             time.sleep(1)
             """
             Need to implement monitoring system:
@@ -224,7 +235,7 @@ class TaskmasterDaemon(object):
         for proc_conf in self.config.lst_proc_conf:
             process = Process(proc_conf)
             self.processes.append(process)
-            self.proc_states.append({process, 'stopped'})
+            self.proc_states.append([process.config.proc_name, 'stopped'])
 
     def kill_processes(self, signal):
         for proc in self.processes:
@@ -236,6 +247,15 @@ class TaskmasterDaemon(object):
         """
         for proc in self.processes:
             proc.run()
+
+    def get_proc_by_name(self, name):
+        """
+        Get process from list by its name
+        """
+        for proc in self.processes:
+            if proc.get_by_name(name):
+                return proc
+        return None
 
     def choose_command(self, command):
         """
