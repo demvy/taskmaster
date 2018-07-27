@@ -215,9 +215,9 @@ class TaskmasterDaemon(object):
                 if proc:
                     el[1] = proc.get_state()
 
-            print("%-20s|%-10s" % ("Process", "State"))
+            print("%-20s|%-5s|%-10s" % ("Process", "PID", "State"))
             for struct in self.proc_states:
-                print("{:20}|{:10}".format(struct[0], struct[1]))
+                print("{:20}|{:5}|{:10}".format(struct[0], self.get_proc_by_name(struct[0]).pid, struct[1]))
             time.sleep(1)
             """
             Need to implement monitoring system:
