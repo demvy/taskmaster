@@ -3,6 +3,7 @@ import signal
 import os
 import shlex
 import stat
+import logging
 
 cmd_options_lst = ['cmd', 'umask', 'workingdir', 'priority', 'autostart', 'startsecs', 'autorestart',
                    'exitcodes', 'startretries', 'stopsignal', 'stopwaitsecs', 'user', 'stdout',
@@ -10,6 +11,7 @@ cmd_options_lst = ['cmd', 'umask', 'workingdir', 'priority', 'autostart', 'start
 cmd_necessary_opt_lst = ['cmd', 'startsecs', 'exitcodes', 'startretries',
                          'stopsignal', 'numprocs', 'umask', 'autostart', 'autorestart',
                          'stopwaitsecs', 'stdout', 'stderr', 'env', 'workingdir']
+logger = logging.getLogger("taskmasterd")
 
 
 class Config(object):
@@ -61,15 +63,13 @@ class Config(object):
                     file = os.open(option, os.O_CREAT | os.O_WRONLY | os.O_APPEND)
                     return file
                 except Exception:
-                    #TODO: logger->Can't open file for pipe %s" % option
-                    pass
+                    logger.error("Can't open file for pipe %s" % option)
             else:
                 try:
                     fd = int(option)
                     return fd
                 except Exception:
-                    #TODO: logger->Bad type for fd %s" % option
-                    pass
+                    logger.error("Bad type for fd %s" % option)
 
     def set_options(self, opt):
         """Set dict of options"""

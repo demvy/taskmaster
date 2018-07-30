@@ -9,13 +9,16 @@ import socket
 import pwd
 import grp
 import errno
-from config import Config, ProcessConfig
+from config import Config
 from datetime import datetime as dt
 from server import ServerThread
 
+logger = logging.getLogger("taskmasterd")
+logger.setLevel(logging.DEBUG)
+
 threads = []
 taskmasterd = None
-state_choice = {'S': 'sleeping', 'R': 'running', 'T': 'stopped', 't': 'stopped',
+state_choice = {'S': 'running', 'R': 'running', 'T': 'stopped', 't': 'stopped',
                 'Z': 'zombie', 'X': 'killed', 'x': 'killed'}
 
 
@@ -51,6 +54,7 @@ class Process(object):
     def __init__(self, config):
         self.config = config
         self.state = 'stopped'
+        self.logger = logger
 
     def drop_priviledges(self, user):
         if user is None:
@@ -100,7 +104,7 @@ class Process(object):
         print(self.config.proc_name)
         if self.pid:
             msg = 'process \'%s\' already running' % self.config.proc_name
-            #options.logger.warn(msg)
+            self.logger.warning(msg)
             return
 
         self.laststart = time.time()
@@ -127,8 +131,7 @@ class Process(object):
                 user = getattr(self.config, 'user', None)
                 out = self.set_uid(user)
                 if out:
-                    #TODO: logger to write output
-                    pass
+                    self.logger.info("process: %s: " % self.pid + out)
                 env = self.config.get_env()
                 cwd = self.config.workingdir
                 if cwd is not None:
@@ -136,8 +139,8 @@ class Process(object):
                         os.chdir(cwd)
                     except OSError as why:
                         code = errno.errorcode.get(why.args[0], why.args[0])
-                        msg = "couldn't chdir to %s: %s\n" % (cwd, code)
-                        #TODO: logger to write error message
+                        msg = "process: %s: couldn't chdir to %s: %s\n" % (self.pid, cwd, code)
+                        self.logger.warning(msg)
                         return
                 try:
                     print("44444444444444")
@@ -148,14 +151,13 @@ class Process(object):
                     print("555555555555555555")
                 except OSError as why:
                     code = errno.errorcode.get(why.args[0], why.args[0])
-                    msg = "couldn't exec %s: %s\n" % (argv[0], code)
-                    #TODO: logger to write error
+                    msg = "process: %s: couldn't exec %s: %s\n" % (self.pid, argv[0], code)
+                    self.logger.error(msg)
             else:
                 self.pid = pid
         finally:
-            #TODO: logger - child process was not spawned
-            print("333333333333333")
-            #os.write(2, b"taskmasterd: child process was not spawned\n")
+            self.logger.error("child process was not spawned")
+            #print("333333333333333")
             #os._exit(127)  # exit process with code for spawn failure
 
     def __repr__(self):
@@ -171,8 +173,7 @@ class Process(object):
             self.state = 'stopped'
             return
         if not self.pid:
-            #TODO: logger -> tried to kill not running process
-            pass
+            self.logger.error("tried to kill not running process")
         self.delay = time.time() + self.config.stopwaitsecs
         self.state = 'stopping'
         try:
@@ -200,7 +201,16 @@ class TaskmasterDaemon(object):
         #process = ['process_name', 'state'] # this is structure in proc_states
         self.proc_states = []
         self.processes = []
-        self.logging = logging.basicConfig(filename=config.logfile, level=logging.DEBUG)
+        if self.config.logfile:
+            global logger
+            self.logging = logger
+            fh = logging.FileHandler(config.logfile)
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            fh.setFormatter(formatter)
+            self.logging.addHandler(fh)
+            logger = self.logging
+        else:
+            self.logging = logging
 
     def set_config(self, config):
         self.config = config
@@ -279,7 +289,7 @@ class TaskmasterDaemon(object):
                     proc = Process(v)
                     new_process_group.append({ proc.name : proc.status})
         """
-
+        self.logging.info("Config has been reloaded")
 
 class ExitException(Exception):
     """
@@ -308,7 +318,7 @@ def main(path_to_config):
 
     # do server thread like in server.py main func
     # Taskmasterd will be in one thread, instance of server - in other
-    # for new client connection, make new thread which can call taskmaster.choose_command(command)
+    # for new client connection, the same thread, can call taskmaster.choose_command(command)
 
     try:
         global listen_thread#, job_thread
