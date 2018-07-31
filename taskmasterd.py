@@ -119,7 +119,6 @@ class Process(object):
         try:
             pid = os.fork()
             if pid == 0:
-                print("ggggggggw")
                 os.setpgrp()
                 os.dup2(self.config.stdout, 1)
                 os.dup2(self.config.stderr, 2)
@@ -155,9 +154,10 @@ class Process(object):
                     self.logger.error(msg)
             else:
                 self.pid = pid
+                self.logger.info("child process spawned")
         finally:
-            self.logger.error("child process was not spawned")
-            #print("333333333333333")
+            #self.logger.error("child process was not spawned")
+            print("333333333333333")
             #os._exit(127)  # exit process with code for spawn failure
 
     def __repr__(self):
@@ -220,23 +220,16 @@ class TaskmasterDaemon(object):
         self.run_processes()
         print("In taskmaster run!")
         while True:
+            print("%-20s|%-5s|%-10s" % ("Process", "PID", "State"))
+            for struct in self.proc_states:
+                print("{:20}|{:5}|{:10}".format(struct[0], self.get_proc_by_name(struct[0]).pid, struct[1]))
+
             for el in self.proc_states:
                 proc = self.get_proc_by_name(el[0])
                 if proc:
                     el[1] = proc.get_state()
 
-            print("%-20s|%-5s|%-10s" % ("Process", "PID", "State"))
-            for struct in self.proc_states:
-                print("{:20}|{:5}|{:10}".format(struct[0], self.get_proc_by_name(struct[0]).pid, struct[1]))
-            time.sleep(1)
-            """
-            Need to implement monitoring system:
-                Every 1-2 seconds get states from all processes and write in Taskmaster variable
-                - get values
-                - lock()
-                - write_values
-                - unlock()
-            """
+            time.sleep(2)
 
     def create_processes(self):
         """
