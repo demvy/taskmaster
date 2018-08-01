@@ -12,6 +12,7 @@ import errno
 from config import Config
 from datetime import datetime as dt
 from server import ServerThread
+from utils import _signames, decode_wait_status
 
 logger = logging.getLogger("taskmasterd")
 logger.setLevel(logging.DEBUG)
@@ -48,8 +49,9 @@ class Process(object):
     pid = 0
     laststart = 0
     laststop = 0
-    delay = 0
+    delay = 0 # If nonzero, delay starting or killing until this time
     startretries = 0
+    killing = False
 
     def __init__(self, config):
         self.config = config
@@ -109,6 +111,7 @@ class Process(object):
 
         self.laststart = time.time()
         self.state = 'starting'
+        self.killing = False
         try:
             filename, argv = self.config.check_cmd()
         except ValueError as what:
@@ -130,7 +133,7 @@ class Process(object):
                 user = getattr(self.config, 'user', None)
                 out = self.set_uid(user)
                 if out:
-                    self.logger.info("process: %s: " % self.pid + out)
+                    self.logger.info("process: %s: " % self.config.proc_name + out)
                 env = self.config.get_env()
                 cwd = self.config.workingdir
                 if cwd is not None:
@@ -138,7 +141,7 @@ class Process(object):
                         os.chdir(cwd)
                     except OSError as why:
                         code = errno.errorcode.get(why.args[0], why.args[0])
-                        msg = "process: %s: couldn't chdir to %s: %s\n" % (self.pid, cwd, code)
+                        msg = "process: %s: couldn't chdir to %s: %s\n" % (self.config.proc_name, cwd, code)
                         self.logger.warning(msg)
                         return
                 try:
@@ -150,7 +153,7 @@ class Process(object):
                     print("555555555555555555")
                 except OSError as why:
                     code = errno.errorcode.get(why.args[0], why.args[0])
-                    msg = "process: %s: couldn't exec %s: %s\n" % (self.pid, argv[0], code)
+                    msg = "process: %s: couldn't exec %s: %s\n" % (self.config.proc_name, argv[0], code)
                     self.logger.error(msg)
             else:
                 self.pid = pid
@@ -168,14 +171,24 @@ class Process(object):
             return self
         return None
 
+    def check_exit(self, code):
+        print(self.config.exitcodes)
+        if code in self.config.exitcodes:
+            return True
+        else:
+            return False
+
     def kill(self, signal):
         if self.state == 'backoff':
             self.state = 'stopped'
             return
+
         if not self.pid:
             self.logger.error("tried to kill not running process")
         self.delay = time.time() + self.config.stopwaitsecs
         self.state = 'stopping'
+        self.killing = True
+
         try:
             os.close(self.config.stdout)
             os.close(self.config.stderr)
@@ -184,6 +197,37 @@ class Process(object):
             self.pid = 0
             self.state = 'unknown'
             self.delay = 0
+            self.killing = False
+
+    def finish(self, status):
+        ex_code, msg = decode_wait_status(status)
+
+        now = time.time()
+        self.laststop = now
+        if now > self.laststart:
+            too_quick = now - self.laststart < self.config.startsecs
+        else:
+            too_quick = False
+            self.logger.warn("process \'%s\' laststart time is in the future, don't "
+                             "know how long process was running so assuming it did "
+                             "not exit too quickly" % self.config.proc_name)
+
+        expected_exit = self.check_exit(ex_code)
+        if self.killing:
+            self.killing = False
+            self.delay = 0
+            message = "process: %s: (%s)" % (self.config.proc_name, msg)
+            if self.state == 'stopping':
+                self.state = 'stopped'
+        if too_quick:
+            #exited faster than needed to be is status launched
+            message = "exited: %s (%s)" % (self.config.proc_name, msg + "; not expected")
+            if self.state == 'starting':
+                self.state = 'backoff'
+        else:
+            #TODO: write normal ending of process
+            pass
+
 
     def get_state(self):
         try:
@@ -215,6 +259,22 @@ class TaskmasterDaemon(object):
     def set_config(self, config):
         self.config = config
 
+    def wait_children(self):
+        try:
+            pid, sts = os.waitpid(-1, os.WNOHANG)
+            if pid:
+                process = self.get_proc_by_pid(pid)
+                if process is None:
+                    self.logging.info('reaped unknown pid %s' % pid)
+                else:
+                    process.finish(sts)
+        except OSError as exc:
+            code = exc.args[0]
+            if code not in (errno.ECHILD, errno.EINTR):
+                self.logging.critical('waitpid error %r; a process may not be cleaned up properly' % code)
+            pid, sts = None, None
+        return pid, sts
+
     def run(self):
         self.create_processes()
         self.run_processes()
@@ -228,6 +288,9 @@ class TaskmasterDaemon(object):
                 proc = self.get_proc_by_name(el[0])
                 if proc:
                     el[1] = proc.get_state()
+
+            #self.wait_children()
+
 
             time.sleep(2)
 
@@ -257,6 +320,15 @@ class TaskmasterDaemon(object):
         """
         for proc in self.processes:
             if proc.get_by_name(name):
+                return proc
+        return None
+
+    def get_proc_by_pid(self, pid):
+        """
+        Get process from list by its pid
+        """
+        for proc in self.processes:
+            if proc.pid == pid:
                 return proc
         return None
 
