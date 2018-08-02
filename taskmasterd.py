@@ -10,26 +10,24 @@ import pwd
 import grp
 import errno
 from config import Config
-from datetime import datetime as dt
 from server import ServerThread
 from utils import _signames, decode_wait_status
 
 logger = logging.getLogger("taskmasterd")
 logger.setLevel(logging.DEBUG)
 
-threads = []
 taskmasterd = None
 state_choice = {'S': 'running', 'R': 'running', 'T': 'stopped', 't': 'stopped',
                 'Z': 'zombie', 'X': 'killed', 'x': 'killed'}
 
 
-def listening_thread():
+def listening_thread(stop_event):
     sock = socket.socket()
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.bind(('', 1337))
     sock.listen(5)
 
-    while True:
+    while not stop_event.is_set():
         try:
             conn, addr = sock.accept()
         except KeyboardInterrupt as e:
@@ -183,8 +181,8 @@ class Process(object):
             self.state = 'stopped'
             return
 
-        if not self.pid:
-            self.logger.error("tried to kill not running process")
+        if self.pid == 0:
+            self.logger.error("process: %s: tried to kill not running process" % self.config.proc_name)
         self.delay = time.time() + self.config.stopwaitsecs
         self.state = 'stopping'
         self.killing = True
@@ -200,7 +198,7 @@ class Process(object):
             self.killing = False
 
     def finish(self, status):
-        ex_code, msg = decode_wait_status(status)
+        ex_code, message = decode_wait_status(status)
 
         now = time.time()
         self.laststop = now
@@ -216,27 +214,47 @@ class Process(object):
         if self.killing:
             self.killing = False
             self.delay = 0
-            message = "process: %s: (%s)" % (self.config.proc_name, msg)
+            message = "process: %s: (%s)" % (self.config.proc_name, message)
             if self.state == 'stopping':
                 self.state = 'stopped'
         if too_quick:
-            #exited faster than needed to be is status launched
-            message = "exited: %s (%s)" % (self.config.proc_name, msg + "; not expected")
+            # exited faster than needed to be is status launched
+            message = "exited: %s (%s)" % (self.config.proc_name, message + "; not expected")
+            self.startretries += 1
             if self.state == 'starting':
                 self.state = 'backoff'
+            if self.config.startretries > self.startretries:
+                self.run()
+            else:
+                message = "exited: %s (%s); can't run after startretries" % (self.config.proc_name, message)
+                self.state = "exited"
         else:
-            #TODO: write normal ending of process
-            pass
+            # normal ending of process from running->stopped state
+            self.delay = 0
+            self.backoff = 0
+            if self.state == 'starting':
+                self.state = 'running'
+            if expected_exit:
+                # expected exit code
+                message = "exited: %s (%s)" % (self.config.proc_name, message + "; expected")
+            else:
+                # unexpected exit code
+                message = "exited: %s (%s)" % (self.config.proc_name, message + "; not expected")
+            self.state = 'exited'
 
+        self.logger.info(message)
+        self.pid = 0
 
     def get_state(self):
-        try:
-            stat = open("/proc/{}/stat".format(self.pid), 'r')
-            mode = stat.readline().split()[2]
-            self.state = state_choice[mode]
-            return self.state
-        except Exception:
-            return 'killed'
+        #if self.state in ['backoff', 'exited', 'stopped']:
+        return self.state
+        #try:
+        #    stat = open("/proc/{}/stat".format(self.pid), 'r')
+        #    mode = stat.readline().split()[2]
+        #    self.state = state_choice[mode]
+        #    return self.state
+        #except Exception:
+        #    return 'killed'
 
 
 class TaskmasterDaemon(object):
@@ -289,7 +307,7 @@ class TaskmasterDaemon(object):
                 if proc:
                     el[1] = proc.get_state()
 
-            #self.wait_children()
+            self.wait_children()
 
 
             time.sleep(2)
@@ -306,6 +324,7 @@ class TaskmasterDaemon(object):
     def kill_processes(self, signal):
         for proc in self.processes:
             proc.kill(signal)
+        self.wait_children()
 
     def run_processes(self):
         """
@@ -377,7 +396,7 @@ def sigint_handler(signum, frame):
 
 
 def main(path_to_config):
-    global threads, config, taskmasterd
+    global config, taskmasterd
     signal.signal(signal.SIGHUP, sighup_handler)
     signal.signal(signal.SIGINT, sigint_handler)
 
@@ -387,16 +406,18 @@ def main(path_to_config):
 
     try:
         global listen_thread#, job_thread
-        listen_thread = threading.Thread(name='listener', target=listening_thread)
+        stop_event = threading.Event()
+        listen_thread = threading.Thread(name='listener', target=listening_thread, args=(stop_event,))
         listen_thread.setDaemon(True)
         listen_thread.start()
         config = Config(path_to_config)
         taskmasterd = TaskmasterDaemon(config)
         taskmasterd.run()
     except ExitException:
-        print ("Error: unable to start thread")
+        #print ("Error: unable to start thread")
         taskmasterd.kill_processes(signal.SIGINT)
-        listen_thread.join()
+        stop_event.set()
+        #listen_thread.join()
 
 
 if __name__ == "__main__":
