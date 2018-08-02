@@ -23,7 +23,7 @@ class Config(object):
     def __init__(self, conf_name):
         """Return Config object with given dict of options or {}"""
         options = dict(self.read_from_config_file(conf_name))
-        user_ps = dict((i, options[i]) for i in options if i!='taskmasterd')
+        user_ps = dict((i, options[i]) for i in options if i != 'taskmasterd')
         for d in user_ps.keys():
             self.check_kwarg(user_ps.get(d))
         self.check_daemon_conf(options.get('taskmasterd', {}))
@@ -47,6 +47,7 @@ class Config(object):
             conf['stdout'] = conf.get('stdout', 1)
             conf['stderr'] = conf.get('stderr', 2)
             conf['env'] = conf.get('env', os.environ)
+            conf['exitcodes'] = list(map(int, conf.get('exitcodes').split(',')))
             conf['logfile'] = self.logfile
             conf['stdout'] = self.get_fd(conf['stdout'])
             conf['stderr'] = self.get_fd(conf['stderr'])
