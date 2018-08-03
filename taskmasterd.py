@@ -223,11 +223,6 @@ class Process(object):
             self.startretries += 1
             if self.state == 'starting':
                 self.state = 'backoff'
-            if self.config.startretries > self.startretries:
-                self.run()
-            else:
-                message = "exited: %s (%s); can't run after startretries" % (self.config.proc_name, message)
-                self.state = "exited"
         else:
             # normal ending of process from running->stopped state
             self.delay = 0
@@ -238,12 +233,51 @@ class Process(object):
                 # expected exit code
                 message = "exited: %s (%s)" % (self.config.proc_name, message + "; expected")
             else:
-                # unexpected exit code
+                self.startretries += 1
                 message = "exited: %s (%s)" % (self.config.proc_name, message + "; not expected")
             self.state = 'exited'
 
         self.logger.info(message)
         self.pid = 0
+        if self.config.autorestart == 'never':
+            return
+        elif self.config.autorestart == 'always':
+            self.run()
+        elif self.config.autorestart == 'unexpected' and not expected_exit:
+            if self.config.startretries > self.startretries:
+                self.run()
+            else:
+                message = "exited: %s: can't run after startretries" % self.config.proc_name
+                self.logger.info(message)
+
+    def check_state(self):
+        now = time.time()
+        if self.state == 'starting':
+            if now - self.laststart > self.config.startsecs:
+                self.delay = 0
+                self.backoff = 0
+                self.state = 'running'
+                msg = ('process: %s: entered RUNNING state, process has stayed up for '
+                       '> than %s seconds (startsecs)' % (self.config.proc_name, self.config.startsecs))
+                logger.info(msg)
+
+        if self.state == 'backoff':
+            if self.backoff > self.config.startretries:
+                self.delay = 0
+                self.backoff = 0
+                self.state = 'fatal'
+                msg = ('process: %s: entered FATAL state, too many start retries too '
+                       'quickly' % self.config.proc_name)
+                logger.info(msg)
+
+        elif self.state == 'stopping':
+            time_left = self.delay - now
+            if time_left <= 0:
+                # kill processes which are taking too long to stop with a final sigkill.
+                # If this doesn't kill it, the process will be stuck in the STOPPING state forever.
+                self.logger.warn(
+                    'killing \'%s\' (%s) with %s' % (self.config.proc_name, self.pid, self.config.stopsignal))
+                self.kill(signal.SIGKILL)
 
     def get_state(self):
         #if self.state in ['backoff', 'exited', 'stopped']:
@@ -298,15 +332,10 @@ class TaskmasterDaemon(object):
         self.run_processes()
         print("In taskmaster run!")
         while True:
-            print("%-20s|%-5s|%-10s" % ("Process", "PID", "State"))
-            for struct in self.proc_states:
-                print("{:20}|{:5}|{:10}".format(struct[0], self.get_proc_by_name(struct[0]).pid, struct[1]))
-
-            for el in self.proc_states:
-                proc = self.get_proc_by_name(el[0])
-                if proc:
-                    el[1] = proc.get_state()
-
+            print("%-20s|%-5s|%-10s|%-5s" % ("Process", "PID", "State", 'startretries'))
+            for proc in self.processes:
+                proc.check_state()
+                print("{:20}|{:5}|{:10}|{:5}".format(proc.config.proc_name, proc.pid, proc.state, proc.startretries))
             self.wait_children()
 
 
@@ -331,7 +360,8 @@ class TaskmasterDaemon(object):
         Run each process from config
         """
         for proc in self.processes:
-            proc.run()
+            if proc.config.autostart:
+                proc.run()
 
     def get_proc_by_name(self, name):
         """

@@ -35,7 +35,9 @@ class Config(object):
         self.create_proc_confs(user_ps)
 
     def create_proc_confs(self, options):
-        # For each process config fill params and add Process conf to list of confs
+        """
+        For each process config fill params and add Process conf to list of confs
+        """
         for k, v in options.items():
             conf = dict()
             for name, value in v.items():
@@ -55,7 +57,6 @@ class Config(object):
             self.lst_proc_conf.append(proc_conf)
 
     def get_fd(self, option):
-        print(option)
         if isinstance(option, int):
             return option
         else:
