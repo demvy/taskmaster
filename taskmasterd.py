@@ -226,7 +226,7 @@ class Process(object):
         else:
             # normal ending of process from running->stopped state
             self.delay = 0
-            self.backoff = 0
+            self.startretries = 0
             if self.state == 'starting':
                 self.state = 'running'
             if expected_exit:
@@ -255,16 +255,16 @@ class Process(object):
         if self.state == 'starting':
             if now - self.laststart > self.config.startsecs:
                 self.delay = 0
-                self.backoff = 0
+                self.startretries = 0
                 self.state = 'running'
                 msg = ('process: %s: entered RUNNING state, process has stayed up for '
                        '> than %s seconds (startsecs)' % (self.config.proc_name, self.config.startsecs))
                 logger.info(msg)
 
         if self.state == 'backoff':
-            if self.backoff > self.config.startretries:
+            if self.startretries > self.config.startretries:
                 self.delay = 0
-                self.backoff = 0
+                self.startretries = 0
                 self.state = 'fatal'
                 msg = ('process: %s: entered FATAL state, too many start retries too '
                        'quickly' % self.config.proc_name)
