@@ -17,8 +17,6 @@ logger = logging.getLogger("taskmasterd")
 logger.setLevel(logging.DEBUG)
 
 taskmasterd = None
-state_choice = {'S': 'running', 'R': 'running', 'T': 'stopped', 't': 'stopped',
-                'Z': 'zombie', 'X': 'killed', 'x': 'killed'}
 
 
 def listening_thread(stop_event):
@@ -54,7 +52,6 @@ class Process(object):
     def __init__(self, config):
         self.config = config
         self.state = 'stopped'
-        self.logger = logger
 
     def drop_priviledges(self, user):
         if user is None:
@@ -104,7 +101,7 @@ class Process(object):
         print(self.config.proc_name)
         if self.pid:
             msg = 'process \'%s\' already running' % self.config.proc_name
-            self.logger.warning(msg)
+            logger.warning(msg)
             return
 
         self.laststart = time.time()
@@ -131,7 +128,7 @@ class Process(object):
                 user = getattr(self.config, 'user', None)
                 out = self.set_uid(user)
                 if out:
-                    self.logger.info("process: %s: %s" % (self.config.proc_name, out))
+                    logger.info("process: %s: %s" % (self.config.proc_name, out))
                 env = self.config.get_env()
                 cwd = self.config.workingdir
                 if cwd is not None:
@@ -140,26 +137,21 @@ class Process(object):
                     except OSError as why:
                         code = errno.errorcode.get(why.args[0], why.args[0])
                         msg = "process: %s: couldn't chdir to %s: %s\n" % (self.config.proc_name, cwd, code)
-                        self.logger.warning(msg)
+                        logger.warning(msg)
                         return
                 try:
-                    print("44444444444444")
                     if self.config.umask is not None:
                         os.umask(int(self.config.umask, 8))
-                    print(filename, argv, env)
                     os.execve(filename, argv, env)
-                    print("555555555555555555")
                 except OSError as why:
                     code = errno.errorcode.get(why.args[0], why.args[0])
                     msg = "process: %s: couldn't exec %s: %s\n" % (self.config.proc_name, argv[0], code)
-                    self.logger.error(msg)
+                    logger.error(msg)
             else:
                 self.pid = pid
-                self.logger.info("child process spawned")
+                logger.info("child process spawned")
         finally:
-            #self.logger.error("child process was not spawned")
-            print("333333333333333")
-            #os._exit(127)  # exit process with code for spawn failure
+            pass
 
     def __repr__(self):
         return self.config.proc_name
@@ -182,11 +174,11 @@ class Process(object):
             return
 
         if self.pid == 0:
-            self.logger.error("process: %s: tried to kill not running process" % self.config.proc_name)
+            logger.error("process: %s: tried to kill not running process" % self.config.proc_name)
         self.delay = time.time() + self.config.stopwaitsecs
         self.state = 'stopping'
         self.killing = True
-        self.logger.debug('killing %s (pid %s) with signal %s' % (self.config.proc_name, self.pid, get_signame(signal)))
+        logger.debug('killing %s (pid %s) with signal %s' % (self.config.proc_name, self.pid, get_signame(signal)))
 
         try:
             os.close(self.config.stdout)
@@ -207,7 +199,7 @@ class Process(object):
             too_quick = now - self.laststart < self.config.startsecs
         else:
             too_quick = False
-            self.logger.warn("process \'%s\' laststart time is in the future, don't "
+            logger.warn("process \'%s\' laststart time is in the future, don't "
                              "know how long process was running so assuming it did "
                              "not exit too quickly" % self.config.proc_name)
 
@@ -235,34 +227,29 @@ class Process(object):
                 self.startretries = 0
                 message = "exited: %s (%s)" % (self.config.proc_name, message + "; expected")
             else:
-                print("I WAS HERER!!!!\n")
                 self.startretries += 1
                 message = "exited: %s (%s)" % (self.config.proc_name, message + "; not expected")
-            print("I have to set state EXITED\n")
             self.state = 'exited'
 
-        self.logger.info(message)
+        logger.info(message)
         self.pid = 0
         if self.config.autorestart == 'never':
             return
         elif self.config.autorestart == 'always':
-            print("HEEEERERERERERE\n")
             self.run()
         elif self.config.autorestart == 'unexpected' and not expected_exit:
-            print("going\n")
             if self.config.startretries > self.startretries:
-                print("into pizda\n")
                 self.run()
             else:
                 message = "exited: %s: can't run after startretries" % self.config.proc_name
-                self.logger.info(message)
+                logger.info(message)
 
     def check_state(self):
         now = time.time()
         if self.state == 'starting':
             if now - self.laststart > self.config.startsecs:
                 self.delay = 0
-                self.startretries = 0
+                #self.startretries = 0
                 self.state = 'running'
                 msg = ('process: %s: entered RUNNING state, process has stayed up for '
                        '> than %s seconds (startsecs)' % (self.config.proc_name, self.config.startsecs))
@@ -270,6 +257,7 @@ class Process(object):
 
         if self.state == 'backoff':
             if self.startretries >= self.config.startretries:
+                print("gggggggggggg")
                 self.delay = 0
                 self.startretries = 0
                 self.state = 'fatal'
@@ -282,7 +270,7 @@ class Process(object):
             if time_left <= 0:
                 # kill processes which are taking too long to stop with a final sigkill.
                 # If this doesn't kill it, the process will be stuck in the STOPPING state forever.
-                self.logger.warn(
+                logger.warn(
                     'killing \'%s\' (%s) with %s' % (self.config.proc_name, self.pid, self.config.stopsignal.name))
                 self.kill(self.config.stopsignal)
 
@@ -396,7 +384,7 @@ class TaskmasterDaemon(object):
         pass
 
     def change_config(self, new_config):
-        reloading, added, changed, removed = config.diff_to_active(new_config)
+        reloading, added, changed, removed = self.config.diff_to_active(new_config)
 
         """
         for k, v in new_config.items():
