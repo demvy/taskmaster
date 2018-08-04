@@ -290,7 +290,6 @@ class TaskmasterDaemon(object):
     def __init__(self, config):
         self.config = config
         #process = ['process_name', 'state'] # this is structure in proc_states
-        self.proc_states = []
         self.processes = []
         if self.config.logfile:
             global logger
@@ -323,7 +322,7 @@ class TaskmasterDaemon(object):
 
     def run(self):
         self.create_processes(self.config.lst_proc_conf)
-        self.run_processes()
+        self.run_processes(self.processes)
         print("In taskmaster run!")
         while True:
             print("%-20s|%-5s|%-10s|%-5s" % ("Process", "PID", "State", 'startretries'))
@@ -342,18 +341,17 @@ class TaskmasterDaemon(object):
         for proc_conf in list_proc_confs:
             process = Process(proc_conf)
             self.processes.append(process)
-            self.proc_states.append([process.config.proc_name, 'stopped'])
 
-    def kill_processes(self, signal):
-        for proc in self.processes:
+    def kill_processes(self, signal, process_list):
+        for proc in process_list:
             proc.kill(signal)
         self.wait_children()
 
-    def run_processes(self):
+    def run_processes(self, process_list):
         """
         Run each process from config
         """
-        for proc in self.processes:
+        for proc in process_list:
             if proc.config.autostart:
                 proc.run()
 
@@ -372,6 +370,15 @@ class TaskmasterDaemon(object):
         """
         for proc in self.processes:
             if proc.pid == pid:
+                return proc
+        return None
+
+    def get_proc_by_conf(self, conf):
+        """
+        Get process from list by its config
+        """
+        for proc in self.processes:
+            if proc.config.proc_name == conf.proc_name:
                 return proc
         return None
 
@@ -473,7 +480,7 @@ def main(path_to_config):
             pass
     except ExitException:
         #print ("Error: unable to start thread")
-        taskmasterd.kill_processes(signal.SIGINT)
+        taskmasterd.kill_processes(signal.SIGINT, taskmasterd.processes)
         stop_event.set()
         #listen_thread.join()
 
