@@ -381,7 +381,33 @@ class TaskmasterDaemon(object):
         Returns response to client when end (string with status, etc..)
         Need to implement
         """
-        pass
+        list_args = command.split()
+        print(list_args)
+        if (len(list_args) < 1):
+            return None
+        elif (list_args[0] == "start"):
+            proc =  self.get_proc_by_name(list_args[1])
+            if proc is None:
+                return "no such process '" + list_args[1] + "'"
+            return "starting the process '" + list_args[1] + "'..."
+
+        elif (list_args[0] == "stop"):
+            if (list_args[1] == "taskmaster"):
+                # kill the programm
+                return "closing taskmaster..."
+            proc =  self.get_proc_by_name(list_args[1])
+            if proc is None:
+                return "no such process '" + list_args[1] + "'"
+            return "the process '" + list_args[1] + "' is stopped"
+        elif (list_args[0] == "restart"):
+            proc =  self.get_proc_by_name(list_args[1])
+            if proc is None:
+                return "no such process '" + list_args[1] + "'"
+            return "restarting the process '" + list_args[1] + "'..."
+        elif (list_args[0] == "status"):
+            # do code
+            return "fucking status"
+        return "zalupa"
 
     def change_config(self, new_config):
         reloading, added, changed, removed = self.config.diff_to_active(new_config)
@@ -436,7 +462,9 @@ def main(path_to_config):
         listen_thread.start()
         config = Config(path_to_config)
         taskmasterd = TaskmasterDaemon(config)
-        taskmasterd.run()
+        # taskmasterd.run()
+        while True:
+            pass
     except ExitException:
         #print ("Error: unable to start thread")
         taskmasterd.kill_processes(signal.SIGINT)

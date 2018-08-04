@@ -22,16 +22,26 @@ class client_parser(cmd.Cmd):
     def usage(self):
         print("Usage:\tstart\t'process name'\n\tstop\t'process name'\n\trestart\t'process name'\n\tstop\ttaskmaster\n\tstatus")  
 
+    def send_receive(self, line):
+        try:
+            self.socket.send(line.encode())
+            if (line == "stop taskmaster"):
+                exit()
+            data = self.socket.recv(1024).decode()
+        except Exception as e:
+            return
+        if (data):
+            print(data)
+        # if (line == "stop taskmaster" and data == "closing taskmaster..."):
+        #     exit()
+
     def do_stop(self, line):
         if line:
             list_args = line.split()
             if (len(list_args) != 1):
                 self.usage()
-                pass
-            try:
-                self.socket.send(("stop " + line).encode())
-            except Exception as e:
-                pass
+                return
+            self.send_receive("stop " + list_args[0])
         else:
             self.usage()
 
@@ -40,11 +50,8 @@ class client_parser(cmd.Cmd):
             list_args = line.split()
             if (len(list_args) != 1):
                 self.usage()
-                pass
-            try:
-                self.socket.send(("start " + line).encode())
-            except Exception as e:
-                pass
+                return
+            self.send_receive("start " + list_args[0])
         else:
             self.usage()
 
@@ -53,26 +60,14 @@ class client_parser(cmd.Cmd):
             list_args = line.split()
             if (len(list_args) != 1):
                 self.usage()
-                pass
-            try:
-                self.socket.send(("restart " + line).encode())
-                data = self.socket.recv(1024).decode()
-            except Exception as e:
-                pass
-            if (data):
-                print(data)
+                return
+            self.send_receive("restart " + list_args[0])
         else:
             self.usage()
 
     def do_status(self, line):
         if (line != None):
-            try:
-                self.socket.send(("status").encode())
-                data = self.socket.recv(1024).decode()
-            except Exception as e:
-                pass
-            if (data):
-                print(data)
+            self.send_receive("status")
         else:
             self.usage()
     
