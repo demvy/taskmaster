@@ -11,7 +11,7 @@ import grp
 import errno
 from config import Config
 from server import ServerThread
-from utils import _signames, decode_wait_status
+from utils import _signames, decode_wait_status, get_signame
 
 logger = logging.getLogger("taskmasterd")
 logger.setLevel(logging.DEBUG)
@@ -76,7 +76,7 @@ class Process(object):
 
         current_uid = os.getuid()
         if current_uid == uid:
-            return
+            return ""
         if current_uid != 0:
             return "Can't drop privilege as nonroot user"
 
@@ -131,7 +131,7 @@ class Process(object):
                 user = getattr(self.config, 'user', None)
                 out = self.set_uid(user)
                 if out:
-                    self.logger.info("process: %s: " % self.config.proc_name + out)
+                    self.logger.info("process: %s: %s" % (self.config.proc_name, out))
                 env = self.config.get_env()
                 cwd = self.config.workingdir
                 if cwd is not None:
@@ -145,7 +145,7 @@ class Process(object):
                 try:
                     print("44444444444444")
                     if self.config.umask is not None:
-                        os.umask(int(self.config.umask))
+                        os.umask(int(self.config.umask, 8))
                     print(filename, argv, env)
                     os.execve(filename, argv, env)
                     print("555555555555555555")
@@ -186,6 +186,7 @@ class Process(object):
         self.delay = time.time() + self.config.stopwaitsecs
         self.state = 'stopping'
         self.killing = True
+        self.logger.debug('killing %s (pid %s) with signal %s' % (self.config.proc_name, self.pid, get_signame(signal)))
 
         try:
             os.close(self.config.stdout)
@@ -226,15 +227,18 @@ class Process(object):
         else:
             # normal ending of process from running->stopped state
             self.delay = 0
-            self.startretries = 0
+            #self.startretries = 0
             if self.state == 'starting':
                 self.state = 'running'
             if expected_exit:
                 # expected exit code
+                self.startretries = 0
                 message = "exited: %s (%s)" % (self.config.proc_name, message + "; expected")
             else:
+                print("I WAS HERER!!!!\n")
                 self.startretries += 1
                 message = "exited: %s (%s)" % (self.config.proc_name, message + "; not expected")
+            print("I have to set state EXITED\n")
             self.state = 'exited'
 
         self.logger.info(message)
@@ -242,9 +246,12 @@ class Process(object):
         if self.config.autorestart == 'never':
             return
         elif self.config.autorestart == 'always':
+            print("HEEEERERERERERE\n")
             self.run()
         elif self.config.autorestart == 'unexpected' and not expected_exit:
+            print("going\n")
             if self.config.startretries > self.startretries:
+                print("into pizda\n")
                 self.run()
             else:
                 message = "exited: %s: can't run after startretries" % self.config.proc_name
@@ -262,7 +269,7 @@ class Process(object):
                 logger.info(msg)
 
         if self.state == 'backoff':
-            if self.startretries > self.config.startretries:
+            if self.startretries >= self.config.startretries:
                 self.delay = 0
                 self.startretries = 0
                 self.state = 'fatal'
@@ -276,8 +283,8 @@ class Process(object):
                 # kill processes which are taking too long to stop with a final sigkill.
                 # If this doesn't kill it, the process will be stuck in the STOPPING state forever.
                 self.logger.warn(
-                    'killing \'%s\' (%s) with %s' % (self.config.proc_name, self.pid, self.config.stopsignal))
-                self.kill(signal.SIGKILL)
+                    'killing \'%s\' (%s) with %s' % (self.config.proc_name, self.pid, self.config.stopsignal.name))
+                self.kill(self.config.stopsignal)
 
     def get_state(self):
         #if self.state in ['backoff', 'exited', 'stopped']:
@@ -299,12 +306,11 @@ class TaskmasterDaemon(object):
         self.processes = []
         if self.config.logfile:
             global logger
-            self.logging = logger
             fh = logging.FileHandler(config.logfile)
             formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
             fh.setFormatter(formatter)
-            self.logging.addHandler(fh)
-            logger = self.logging
+            logger.addHandler(fh)
+            self.logging = logger
         else:
             self.logging = logging
 
