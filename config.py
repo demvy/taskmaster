@@ -25,6 +25,7 @@ class Config(object):
 
     def __init__(self, conf_name):
         """Return Config object with given dict of options or {}"""
+        self.name = conf_name
         options = dict(self.read_from_config_file(conf_name))
         user_ps = dict((i, options[i]) for i in options if i != 'taskmasterd')
         for d in user_ps.keys():

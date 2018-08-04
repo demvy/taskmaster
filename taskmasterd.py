@@ -421,7 +421,7 @@ class ExitException(Exception):
 def sighup_handler(signum, frame):
     global taskmasterd
     global new_cfg, config
-    new_cfg = Config(cfg_name)
+    new_cfg = Config(config.name)
     taskmasterd.change_config(new_cfg)
     taskmasterd.set_config(new_cfg)
     config = new_cfg
