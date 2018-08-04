@@ -389,6 +389,7 @@ class TaskmasterDaemon(object):
             proc =  self.get_proc_by_name(list_args[1])
             if proc is None:
                 return "no such process '" + list_args[1] + "'"
+            # do code
             return "starting the process '" + list_args[1] + "'..."
 
         elif (list_args[0] == "stop"):
@@ -398,12 +399,16 @@ class TaskmasterDaemon(object):
             proc =  self.get_proc_by_name(list_args[1])
             if proc is None:
                 return "no such process '" + list_args[1] + "'"
+            # do code
             return "the process '" + list_args[1] + "' is stopped"
+
         elif (list_args[0] == "restart"):
             proc =  self.get_proc_by_name(list_args[1])
             if proc is None:
                 return "no such process '" + list_args[1] + "'"
+            # do code
             return "restarting the process '" + list_args[1] + "'..."
+
         elif (list_args[0] == "status"):
             # do code
             return "fucking status"
