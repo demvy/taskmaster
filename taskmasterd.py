@@ -322,7 +322,7 @@ class TaskmasterDaemon(object):
         return pid, sts
 
     def run(self):
-        self.create_processes()
+        self.create_processes(self.config.lst_proc_conf)
         self.run_processes()
         print("In taskmaster run!")
         while True:
@@ -335,11 +335,11 @@ class TaskmasterDaemon(object):
 
             time.sleep(2)
 
-    def create_processes(self):
+    def create_processes(self, list_proc_confs):
         """
         Creates all processes from config
         """
-        for proc_conf in self.config.lst_proc_conf:
+        for proc_conf in list_proc_confs:
             process = Process(proc_conf)
             self.processes.append(process)
             self.proc_states.append([process.config.proc_name, 'stopped'])
@@ -416,7 +416,9 @@ class TaskmasterDaemon(object):
 
     def change_config(self, new_config):
         reloading, added, changed, removed = self.config.diff_to_active(new_config)
-
+        if not reloading and added or changed or removed:
+            pass
+        self.set_config(new_config)
         """
         for k, v in new_config.items():
             if k != 'taskmasterd':
@@ -442,7 +444,6 @@ def sighup_handler(signum, frame):
     global new_cfg, config
     new_cfg = Config(config.name)
     taskmasterd.change_config(new_cfg)
-    taskmasterd.set_config(new_cfg)
     config = new_cfg
 
 
