@@ -4,6 +4,9 @@ import os
 import shlex
 import stat
 import logging
+import copy
+
+from utils import get_signum
 
 cmd_options_lst = ['cmd', 'umask', 'workingdir', 'priority', 'autostart', 'startsecs', 'autorestart',
                    'exitcodes', 'startretries', 'stopsignal', 'stopwaitsecs', 'user', 'stdout',
@@ -30,7 +33,7 @@ class Config(object):
         taskmasterd_opt = options.get('taskmasterd', {})
         self.logfile = taskmasterd_opt.get('logfile', 'taskmasterd.log')
         self.daemon = taskmasterd_opt.get('daemon', False)
-        self.jobs_amount = len(user_ps)
+        #self.jobs_amount = len(user_ps)
         self.lst_proc_conf = []
         self.create_proc_confs(user_ps)
 
@@ -53,8 +56,12 @@ class Config(object):
             conf['logfile'] = self.logfile
             conf['stdout'] = self.get_fd(conf['stdout'])
             conf['stderr'] = self.get_fd(conf['stderr'])
-            proc_conf = ProcessConfig(conf, k)
-            self.lst_proc_conf.append(proc_conf)
+            num = conf.get('numprocs')
+            conf['stopsignal'] = get_signum(conf.get('stopsignal'))
+            for i in range(1, num + 1):
+                config = copy.copy(conf)
+                proc_conf = ProcessConfig(config, "{}_{}".format(k, i))
+                self.lst_proc_conf.append(proc_conf)
 
     def get_fd(self, option):
         if isinstance(option, int):

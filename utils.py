@@ -13,6 +13,16 @@ def get_signame(sig):
         _init_signames()
     return _signames.get(sig) or "signal %d" % sig
 
+def get_signum(signame):
+    """
+    Get a python signal.signum object
+    """
+    if _signames is None:
+        _init_signames()
+    for obj, name in _signames.items():
+        if name == signame:
+            return obj
+    return None
 
 def _init_signames():
     global _signames
