@@ -20,7 +20,12 @@ class client_parser(cmd.Cmd):
                 exit()
 
     def usage(self):
-        print("Usage:\tstart\t'process name'\n\tstop\t'process name'\n\trestart\t'process name'\n\tstop\ttaskmaster\n\tstatus")  
+        print("Usage:\tstart\t'process name'\n\t"
+              "stop\t'process name'\n\t"
+              "restart\t'process name'\n\t"
+              "stop\ttaskmaster\n\t"
+              "status\n\t"
+              "reload\tconfig\n\t")
 
     def send_receive(self, line):
         try:
@@ -68,6 +73,16 @@ class client_parser(cmd.Cmd):
     def do_status(self, line):
         if (line != None):
             self.send_receive("status")
+        else:
+            self.usage()
+
+    def do_reload(self, line):
+        if line:
+            list_args = line.split()
+            if (len(list_args) != 1 or list_args[0] != "config"):
+                self.usage()
+                return
+            self.send_receive("reload " + list_args[0])
         else:
             self.usage()
     

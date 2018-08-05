@@ -99,6 +99,13 @@ class Process(object):
     def set_uid(self, user):
         return self.drop_priviledges(user)
 
+
+    def close_fds(self):
+        if self.stderr != 2:
+            os.close(self.stderr)
+        if self.stdout != 1:
+            os.close(self.stdout)
+
     def run(self):
         #print(self.config.proc_name)
         if self.pid:
@@ -122,11 +129,11 @@ class Process(object):
                 os.setpgrp()
                 os.dup2(self.stdout, 1)
                 os.dup2(self.stderr, 2)
-                for i in range(3, 1024):
-                    try:
-                        os.close(i)
-                    except OSError:
-                        pass
+                # for i in range(3, 1024):
+                #     try:
+                #         os.close(i)
+                #     except OSError:
+                #         pass
                 user = getattr(self.config, 'user', None)
                 out = self.set_uid(user)
                 if out:
@@ -174,24 +181,32 @@ class Process(object):
             self.state = 'stopped'
             return
 
+        #print("pid = %d" %self.pid)
         if self.pid == 0:
             logger.error("process: %s: tried to kill not running process" % self.config.proc_name)
+            return
         self.delay = time.time() + self.config.stopwaitsecs
         self.state = 'stopping'
         self.killing = True
         logger.debug('killing %s (pid %s) with signal %s' % (self.config.proc_name, self.pid, get_signame(signal)))
 
         try:
-            if self.stdout != 1:
-                os.close(self.stdout)
-            if self.stderr != 2:
-                os.close(self.stderr)
+            #print("gggggggppppppppdddd")
+            #if self.stdout != 1:
+                #print(self.stdout, self.stderr)
+                #os.close(self.stdout)
+            #if self.stderr != 2:
+                #os.close(self.stderr)
+            #print("pid kill = %d" % self.pid)
             os.kill(self.pid, signal)
+            #print("pid after kill = %d" % self.pid)
         except Exception:
             self.pid = 0
             self.state = 'unknown'
             self.delay = 0
             self.killing = False
+            #self.stderr = self.config.get_fd(config.stderr)
+            #self.stdout = self.config.get_fd(config.stdout)
 
     def finish(self, status):
         ex_code, message = decode_wait_status(status)
@@ -280,18 +295,24 @@ class Process(object):
                 self.kill(self.config.stopsignal)
 
     def restart(self):
-        self.kill(signal.SIGKILL)
-        try:
-            pid, sts = os.waitpid(self.pid, os.WNOHANG)
-            if pid:
-                self.finish(sts)
-        except OSError as exc:
-            code = exc.args[0]
-            if code not in (errno.ECHILD, errno.EINTR):
-                logger.critical('process: %s: waitpid error %r; a process may not be cleaned up properly' % (self.config.proc_name, code))
-        self.check_state()
+        self.stop()
         self.run()
 
+    def stop(self):
+        self.kill(self.config.stopsignal)
+        #print("after killing, startretries = " + str(self.startretries))
+        # try:
+        #     pid, sts = os.waitpid(self.pid, os.WNOHANG)
+        #     if pid:
+        #         self.finish(sts)
+        #         print("after fffinish@@@, startretries = " + str(self.startretries))
+        # except OSError as exc:
+        #     code = exc.args[0]
+        #     if code not in (errno.ECHILD, errno.EINTR):
+        #         logger.critical('process: %s: waitpid error %r; a process may not be cleaned up properly' % (
+        #         self.config.proc_name, code))
+        #print("go out!!@!")
+        self.check_state()
 
     def get_state(self):
         return self.state
@@ -344,7 +365,7 @@ class TaskmasterDaemon(object):
         #print("In taskmaster run!")
         while True:
             self.show_status()
-            time.sleep(2)
+            #time.sleep(2)
             pass
 
     def create_processes(self, list_proc_confs):
@@ -418,19 +439,21 @@ class TaskmasterDaemon(object):
             proc =  self.get_proc_by_name(list_args[1])
             if proc is None:
                 return "no such process '" + list_args[1] + "'"
-            if proc.state in ['exited', 'stopped', 'fatal', 'backoff']:
+            if proc.state in ['exited', 'stopped', 'fatal', 'backoff', 'unknown']:
                 proc.run()
             return "starting the process '" + list_args[1] + "'..."
 
         elif (list_args[0] == "stop"):
             if (list_args[1] == "taskmaster"):
-                os.kill(signal.SIGINT, os.getpid())
+                self.kill_processes(signal.SIGKILL, self.processes)
+                time.sleep(1)
+                exit(0)
                 return "closing taskmaster..."
             proc =  self.get_proc_by_name(list_args[1])
             if proc is None:
                 return "no such process '" + list_args[1] + "'"
             if proc.state in ['starting', 'running', 'backoff', 'stopping']:
-                proc.kill(signal.SIGKILL)
+                proc.stop()
             return "the process '" + list_args[1] + "' is stopped"
 
         elif (list_args[0] == "restart"):
@@ -440,9 +463,13 @@ class TaskmasterDaemon(object):
             proc.restart()
             return "restarting the process '" + list_args[1] + "'..."
 
+        elif list_args[0] == "reload":
+            sighup_handler(1, frame=None)
+            return "config reloaded"
+
         elif (list_args[0] == "status"):
             return self.show_status()
-        return "Unexpected command. Try another one"
+        return "unexpected command. Try another one"
 
     def change_config(self, new_config):
         reloading, added, changed, removed = self.config.diff_to_active(new_config)
