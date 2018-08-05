@@ -34,7 +34,6 @@ class Config(object):
         taskmasterd_opt = options.get('taskmasterd', {})
         self.logfile = taskmasterd_opt.get('logfile', 'taskmasterd.log')
         self.daemon = taskmasterd_opt.get('daemon', False)
-        #self.jobs_amount = len(user_ps)
         self.lst_proc_conf = []
         self.create_proc_confs(user_ps)
 
@@ -54,9 +53,6 @@ class Config(object):
             conf['stderr'] = conf.get('stderr', 2)
             conf['env'] = conf.get('env', os.environ)
             conf['exitcodes'] = list(map(int, conf.get('exitcodes').split(',')))
-            conf['logfile'] = self.logfile
-            conf['stdout'] = self.get_fd(conf['stdout'])
-            conf['stderr'] = self.get_fd(conf['stderr'])
             num = conf.get('numprocs')
             conf['stopsignal'] = get_signum(conf.get('stopsignal'))
             for i in range(1, num + 1):
@@ -64,22 +60,16 @@ class Config(object):
                 proc_conf = ProcessConfig(config, "{}_{}".format(k, i))
                 self.lst_proc_conf.append(proc_conf)
 
-    def get_fd(self, option):
-        if isinstance(option, int):
-            return option
-        else:
-            if isinstance(option, str):
-                try:
-                    file = os.open(option, os.O_CREAT | os.O_WRONLY | os.O_APPEND)
-                    return file
-                except Exception:
-                    logger.error("Can't open file for pipe %s" % option)
-            else:
-                try:
-                    fd = int(option)
-                    return fd
-                except Exception:
-                    logger.error("Bad type for fd %s" % option)
+    def filter_proc_conf(self, proc_conf_list):
+        """
+        Filter self.proc_conf with names from proc_conf_list
+        """
+        l = [conf.proc_name for conf in self.lst_proc_conf]
+        result_list = []
+        for needed in proc_conf_list:
+            if needed in l:
+                result_list.append(self.get_proc_conf_by_name(needed))
+        return result_list
 
     def set_options(self, opt):
         """Set dict of options"""
@@ -107,13 +97,12 @@ class Config(object):
         if len(kwarg) > 2:
             raise ValueError('too big config for taskmasterd. 2 params allowed only')
         conf_len = len(kwarg)
-        if conf_len == 1 and 'logfile' not in kwarg.keys() or 'daemon' not in kwarg.keys():
+        if conf_len == 1 and 'logfile' not in kwarg.keys():
             raise ValueError('not known parameter "%s"' % kwarg.keys()[0])
         elif conf_len == 2 and 'logfile' not in kwarg.keys() and 'daemon' not in kwarg.keys():
             raise ValueError('bad options in taskmasterd config')
 
     def check_kwarg(self, kwarg):
-        print(kwarg)
         for opt in kwarg.keys():
             if opt not in cmd_options_lst:
                 raise ValueError('option "%s" is not found in config' % opt)
@@ -163,10 +152,10 @@ class Config(object):
             return False, [], [], []
 
         added, changed, removed = [], [], []
-        for proc_conf in new.get_lst_proc_conf():
+        for proc_conf in new.lst_proc_conf:
             proc = self.get_proc_conf_by_name(proc_conf.get_name())
-            if proc:
-                if not proc.equals(proc_conf):
+            if proc is not None:
+                if not proc.equal(proc_conf):
                     changed.append(proc_conf)
             else:
                 added.append(proc_conf)
@@ -188,13 +177,34 @@ class ProcessConfig(object):
 
     def get(self, name):
         if self.proc_name == name:
-            return self
+            return True
+        return False
 
     def get_name(self):
         return self.proc_name
 
     def __repr__(self):
         return self.proc_name
+
+    def equal(self, other):
+        return self.__dict__ == other.__dict__
+
+    def get_fd(self, option):
+        if isinstance(option, int):
+            return option
+        else:
+            if isinstance(option, str):
+                try:
+                    file = os.open(option, os.O_CREAT | os.O_WRONLY | os.O_APPEND)
+                    return file
+                except Exception:
+                    logger.error("Can't open file for pipe %s" % option)
+            else:
+                try:
+                    fd = int(option)
+                    return fd
+                except Exception:
+                    logger.error("Bad type for fd %s" % option)
 
     def stat(self, filename):
         return os.stat(filename)

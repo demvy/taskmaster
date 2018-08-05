@@ -35,7 +35,7 @@ def listening_thread(stop_event):
             server_thread.set_caller(taskmasterd)
             server_thread.run()
         except:
-            print ("Error: unable to start thread")
+            #print ("Error: unable to start thread")
             conn.close()
 
 
@@ -52,6 +52,8 @@ class Process(object):
     def __init__(self, config):
         self.config = config
         self.state = 'stopped'
+        self.stdout = config.get_fd(config.stdout)
+        self.stderr = config.get_fd(config.stderr)
 
     def drop_priviledges(self, user):
         if user is None:
@@ -98,7 +100,7 @@ class Process(object):
         return self.drop_priviledges(user)
 
     def run(self):
-        print(self.config.proc_name)
+        #print(self.config.proc_name)
         if self.pid:
             msg = 'process \'%s\' already running' % self.config.proc_name
             logger.warning(msg)
@@ -118,8 +120,8 @@ class Process(object):
             pid = os.fork()
             if pid == 0:
                 os.setpgrp()
-                os.dup2(self.config.stdout, 1)
-                os.dup2(self.config.stderr, 2)
+                os.dup2(self.stdout, 1)
+                os.dup2(self.stderr, 2)
                 for i in range(3, 1024):
                     try:
                         os.close(i)
@@ -162,7 +164,6 @@ class Process(object):
         return None
 
     def check_exit(self, code):
-        print(self.config.exitcodes)
         if code in self.config.exitcodes:
             return True
         else:
@@ -181,8 +182,10 @@ class Process(object):
         logger.debug('killing %s (pid %s) with signal %s' % (self.config.proc_name, self.pid, get_signame(signal)))
 
         try:
-            os.close(self.config.stdout)
-            os.close(self.config.stderr)
+            if self.stdout != 1:
+                os.close(self.stdout)
+            if self.stderr != 2:
+                os.close(self.stderr)
             os.kill(self.pid, signal)
         except Exception:
             self.pid = 0
@@ -216,10 +219,13 @@ class Process(object):
             self.startretries += 1
             if self.state == 'starting':
                 self.state = 'backoff'
+            if expected_exit:
+                self.startretries = 0
+                self.delay = 0
+                self.state = 'exited'
         else:
             # normal ending of process from running->stopped state
             self.delay = 0
-            #self.startretries = 0
             if self.state == 'starting':
                 self.state = 'running'
             if expected_exit:
@@ -257,7 +263,6 @@ class Process(object):
 
         if self.state == 'backoff':
             if self.startretries >= self.config.startretries:
-                print("gggggggggggg")
                 self.delay = 0
                 self.startretries = 0
                 self.state = 'fatal'
@@ -274,22 +279,27 @@ class Process(object):
                     'killing \'%s\' (%s) with %s' % (self.config.proc_name, self.pid, self.config.stopsignal.name))
                 self.kill(self.config.stopsignal)
 
+    def restart(self):
+        self.kill(signal.SIGKILL)
+        try:
+            pid, sts = os.waitpid(self.pid, os.WNOHANG)
+            if pid:
+                self.finish(sts)
+        except OSError as exc:
+            code = exc.args[0]
+            if code not in (errno.ECHILD, errno.EINTR):
+                logger.critical('process: %s: waitpid error %r; a process may not be cleaned up properly' % (self.config.proc_name, code))
+        self.check_state()
+        self.run()
+
+
     def get_state(self):
-        #if self.state in ['backoff', 'exited', 'stopped']:
         return self.state
-        #try:
-        #    stat = open("/proc/{}/stat".format(self.pid), 'r')
-        #    mode = stat.readline().split()[2]
-        #    self.state = state_choice[mode]
-        #    return self.state
-        #except Exception:
-        #    return 'killed'
 
 
 class TaskmasterDaemon(object):
     def __init__(self, config):
         self.config = config
-        #process = ['process_name', 'state'] # this is structure in proc_states
         self.processes = []
         if self.config.logfile:
             global logger
@@ -320,32 +330,45 @@ class TaskmasterDaemon(object):
             pid, sts = None, None
         return pid, sts
 
+    def show_status(self):
+        result = ''
+        for proc in self.processes:
+            proc.check_state()
+            result += "{:20}{:10}\n".format(proc.config.proc_name, proc.state)
+        self.wait_children()
+        return result
+
     def run(self):
         self.create_processes(self.config.lst_proc_conf)
         self.run_processes(self.processes)
-        print("In taskmaster run!")
+        #print("In taskmaster run!")
         while True:
-            print("%-20s|%-5s|%-10s|%-5s" % ("Process", "PID", "State", 'startretries'))
-            for proc in self.processes:
-                proc.check_state()
-                print("{:20}|{:5}|{:10}|{:5}".format(proc.config.proc_name, proc.pid, proc.state, proc.startretries))
-            self.wait_children()
-
-
+            self.show_status()
             time.sleep(2)
+            pass
 
     def create_processes(self, list_proc_confs):
         """
-        Creates all processes from config
+        Creates all processes from config, returns these Processes objects list
         """
+        created_list = []
         for proc_conf in list_proc_confs:
             process = Process(proc_conf)
             self.processes.append(process)
+            created_list.append(process)
+        return created_list
 
     def kill_processes(self, signal, process_list):
         for proc in process_list:
-            proc.kill(signal)
-        self.wait_children()
+            the_same_launched_proc = self.get_proc_by_name(proc.config.proc_name)
+            if the_same_launched_proc is not None and isinstance(the_same_launched_proc, Process):
+                self.processes.remove(the_same_launched_proc)
+                if the_same_launched_proc.stdout != 1:
+                    os.close(the_same_launched_proc.stdout)
+                if the_same_launched_proc.stderr != 2:
+                    os.close(the_same_launched_proc.stderr)
+                if the_same_launched_proc.pid:
+                    os.kill(the_same_launched_proc.pid, signal.SIGKILL)
 
     def run_processes(self, process_list):
         """
@@ -389,55 +412,56 @@ class TaskmasterDaemon(object):
         Need to implement
         """
         list_args = command.split()
-        print(list_args)
         if (len(list_args) < 1):
             return None
         elif (list_args[0] == "start"):
             proc =  self.get_proc_by_name(list_args[1])
             if proc is None:
                 return "no such process '" + list_args[1] + "'"
-            # do code
+            if proc.state in ['exited', 'stopped', 'fatal', 'backoff']:
+                proc.run()
             return "starting the process '" + list_args[1] + "'..."
 
         elif (list_args[0] == "stop"):
             if (list_args[1] == "taskmaster"):
-                # kill the programm
+                os.kill(signal.SIGINT, os.getpid())
                 return "closing taskmaster..."
             proc =  self.get_proc_by_name(list_args[1])
             if proc is None:
                 return "no such process '" + list_args[1] + "'"
-            # do code
+            if proc.state in ['starting', 'running', 'backoff', 'stopping']:
+                proc.kill(signal.SIGKILL)
             return "the process '" + list_args[1] + "' is stopped"
 
         elif (list_args[0] == "restart"):
             proc =  self.get_proc_by_name(list_args[1])
             if proc is None:
                 return "no such process '" + list_args[1] + "'"
-            # do code
+            proc.restart()
             return "restarting the process '" + list_args[1] + "'..."
 
         elif (list_args[0] == "status"):
-            # do code
-            return "fucking status"
-        return "zalupa"
+            return self.show_status()
+        return "Unexpected command. Try another one"
 
     def change_config(self, new_config):
         reloading, added, changed, removed = self.config.diff_to_active(new_config)
+        #print(reloading, added, changed, removed)
+
         if not reloading and added or changed or removed:
-            pass
+            lst_proc_to_stop, lst_proc_to_run = [], []
+            for proc_conf in changed + removed:
+                proc = self.get_proc_by_conf(proc_conf)
+                if proc is not None:
+                    lst_proc_to_stop.append(proc)
+            for proc_conf in added + changed:
+                lst_proc_to_run.append(proc_conf)
+            self.kill_processes(signal.SIGKILL, lst_proc_to_stop)
+            lst_proc_to_run = new_config.filter_proc_conf(['{}'.format(name) for name in lst_proc_to_run])
+            lst_proc_to_run = self.create_processes(lst_proc_to_run)
+            self.run_processes(lst_proc_to_run)
         self.set_config(new_config)
-        """
-        for k, v in new_config.items():
-            if k != 'taskmasterd':
-                new_process_group = []
-                self.processes.append(new_process_group)
-                # add check numprocs -> try : check Process creation -> except: refill this process info in conf,
-                #  go to next process name
-                for i in range(v['numprocs']):
-                    proc = Process(v)
-                    new_process_group.append({ proc.name : proc.status})
-        """
-        self.logging.info("Config has been reloaded")
+        self.logging.info("taskmasterd: Config has been reloaded")
 
 class ExitException(Exception):
     """
@@ -447,6 +471,7 @@ class ExitException(Exception):
 
 
 def sighup_handler(signum, frame):
+    #print("In sighup handler")
     global taskmasterd
     global new_cfg, config
     new_cfg = Config(config.name)
@@ -475,14 +500,13 @@ def main(path_to_config):
         listen_thread.start()
         config = Config(path_to_config)
         taskmasterd = TaskmasterDaemon(config)
-        # taskmasterd.run()
+        taskmasterd.run()
         while True:
             pass
     except ExitException:
-        #print ("Error: unable to start thread")
+        ##print ("Error: unable to start thread")
         taskmasterd.kill_processes(signal.SIGINT, taskmasterd.processes)
         stop_event.set()
-        #listen_thread.join()
 
 
 if __name__ == "__main__":

@@ -24,15 +24,14 @@ class ServerThread():#threading.Thread):
     def server_entire(self):
         while not self.shutdown_flag.is_set():
             try:
-                data = self.conn.recv(1024)
+                data = self.conn.recv(1024).decode()
             except ConnectionResetError as e:
                 data = None
             if not data:
                 break
             else:
-                print(data)
-                #response = self.call_back_server.choose_command(data)
-                self.conn.send(data)
+                response = self.call_back_server.choose_command(data)
+                self.conn.send(response.encode())
         self.conn.close()
 
 
