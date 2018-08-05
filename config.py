@@ -109,10 +109,15 @@ class Config(object):
         if not set(cmd_necessary_opt_lst).issubset(set(kwarg.keys())):
             raise ValueError('not filled all necessary parameters!')
         for k, v in kwarg.items():
-            if k == 'cmd' or k == 'umask' or k == 'workingdir' or k == 'exitcodes' or k == 'stopsignal' or k == 'user':
+            if k == 'cmd' or k == 'umask' or k == 'workingdir' or k == 'exitcodes' or k == 'stopsignal' or k == 'user' or k == 'autorestart':
                 if not isinstance(v, str):
                     raise ValueError('bad presentation of "%s"' % k)
+                if k == 'autorestart':
+                    if v not in ['unexpected', 'never', 'always']:
+                        raise ValueError('bad presentation of "%s", need to be %s' % (k, 'unexpected' + ' or never or ' + 'always'))
             if k == 'umask' and not v.isnumeric():
+                raise ValueError('bad value for "%s"' % k)
+            if k == 'autostart' and not isinstance(v, bool):
                 raise ValueError('bad value for "%s"' % k)
             if k == 'numprocs' or k == 'priority' or k == 'startsecs' or k == 'startretries' or k == 'stopwaitsecs':
                 if not isinstance(v, int):
@@ -121,7 +126,10 @@ class Config(object):
                 if v < 0 or v > 1000:
                     raise ValueError('bad value for "%s"' % k)
             if k == 'exitcodes':
-                lst = [int(i) for i in v.split(',')]
+                try:
+                    lst = [int(i) for i in v.split(',')]
+                except Exception as e:
+                    raise ValueError('bad value for "%s"' % k)              
                 if False in list(map(lambda x: False if x not in range(256) else True, lst)):
                     raise ValueError('bad value for "%s"' % k)
             if k == 'stopsignal':
