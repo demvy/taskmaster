@@ -1,6 +1,6 @@
 
 How to use Taskmaster:
-1. $> git clone https://github.com/taskmaster
+1. $> git clone https://github.com/demvy/taskmaster
 2. $> cd taskmaster
 3. $> source compile.sh
 4. run one of the following scripts:
